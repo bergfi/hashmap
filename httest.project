@@ -1,0 +1,571 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CodeLite_Project Name="httest" Version="10.0.0" InternalType="">
+  <Plugins>
+    <Plugin Name="qmake">
+      <![CDATA[00020001N0005Debug0000000000000001N0007Release000000000000]]>
+    </Plugin>
+  </Plugins>
+  <VirtualDirectory Name="junction">
+    <File Name="junction/LICENSE"/>
+    <File Name="junction/CMakeLists.txt"/>
+    <VirtualDirectory Name="build">
+      <VirtualDirectory Name="Release">
+        <File Name="junction/build/Release/Makefile"/>
+        <File Name="junction/build/Release/CMakeCache.txt"/>
+        <VirtualDirectory Name="include">
+          <File Name="junction/build/Release/include/junction_userconfig.h"/>
+          <File Name="junction/build/Release/include/junction_config.h"/>
+        </VirtualDirectory>
+        <VirtualDirectory Name="samples">
+          <VirtualDirectory Name="MapScalabilityTests">
+            <File Name="junction/build/Release/samples/MapScalabilityTests/MapScalabilityTests"/>
+            <File Name="junction/build/Release/samples/MapScalabilityTests/Makefile"/>
+            <VirtualDirectory Name="CMakeFiles">
+              <VirtualDirectory Name="MapScalabilityTests.dir">
+                <File Name="junction/build/Release/samples/MapScalabilityTests/CMakeFiles/MapScalabilityTests.dir/link.txt"/>
+              </VirtualDirectory>
+            </VirtualDirectory>
+          </VirtualDirectory>
+          <VirtualDirectory Name="MapPerformanceTests">
+            <File Name="junction/build/Release/samples/MapPerformanceTests/MapPerformanceTests"/>
+            <File Name="junction/build/Release/samples/MapPerformanceTests/Makefile"/>
+            <VirtualDirectory Name="CMakeFiles">
+              <VirtualDirectory Name="MapPerformanceTests.dir">
+                <File Name="junction/build/Release/samples/MapPerformanceTests/CMakeFiles/MapPerformanceTests.dir/link.txt"/>
+              </VirtualDirectory>
+            </VirtualDirectory>
+          </VirtualDirectory>
+          <VirtualDirectory Name="MapMemoryBench">
+            <File Name="junction/build/Release/samples/MapMemoryBench/MapMemoryBench"/>
+            <File Name="junction/build/Release/samples/MapMemoryBench/Makefile"/>
+            <VirtualDirectory Name="CMakeFiles">
+              <VirtualDirectory Name="MapMemoryBench.dir">
+                <File Name="junction/build/Release/samples/MapMemoryBench/CMakeFiles/MapMemoryBench.dir/link.txt"/>
+              </VirtualDirectory>
+            </VirtualDirectory>
+          </VirtualDirectory>
+          <VirtualDirectory Name="MapLinearizabilityTest">
+            <File Name="junction/build/Release/samples/MapLinearizabilityTest/MapLinearizabilityTest"/>
+            <File Name="junction/build/Release/samples/MapLinearizabilityTest/Makefile"/>
+            <VirtualDirectory Name="CMakeFiles">
+              <VirtualDirectory Name="MapLinearizabilityTest.dir">
+                <File Name="junction/build/Release/samples/MapLinearizabilityTest/CMakeFiles/MapLinearizabilityTest.dir/link.txt"/>
+              </VirtualDirectory>
+            </VirtualDirectory>
+          </VirtualDirectory>
+          <VirtualDirectory Name="MapCorrectnessTests">
+            <File Name="junction/build/Release/samples/MapCorrectnessTests/MapCorrectnessTests"/>
+            <File Name="junction/build/Release/samples/MapCorrectnessTests/Makefile"/>
+            <VirtualDirectory Name="CMakeFiles">
+              <VirtualDirectory Name="MapCorrectnessTests.dir">
+                <File Name="junction/build/Release/samples/MapCorrectnessTests/CMakeFiles/MapCorrectnessTests.dir/link.txt"/>
+              </VirtualDirectory>
+            </VirtualDirectory>
+          </VirtualDirectory>
+          <VirtualDirectory Name="MallocTest">
+            <File Name="junction/build/Release/samples/MallocTest/MallocTest"/>
+            <File Name="junction/build/Release/samples/MallocTest/Makefile"/>
+            <VirtualDirectory Name="CMakeFiles">
+              <VirtualDirectory Name="MallocTest.dir">
+                <File Name="junction/build/Release/samples/MallocTest/CMakeFiles/MallocTest.dir/link.txt"/>
+              </VirtualDirectory>
+            </VirtualDirectory>
+          </VirtualDirectory>
+        </VirtualDirectory>
+        <VirtualDirectory Name="CMakeTmp">
+          <File Name="junction/build/Release/CMakeTmp/CompileCheck.cpp"/>
+        </VirtualDirectory>
+        <VirtualDirectory Name="turf">
+          <File Name="junction/build/Release/turf/Makefile"/>
+          <VirtualDirectory Name="include">
+            <File Name="junction/build/Release/turf/include/turf_userconfig.h"/>
+            <File Name="junction/build/Release/turf/include/turf_config.h"/>
+          </VirtualDirectory>
+          <VirtualDirectory Name="CMakeFiles">
+            <VirtualDirectory Name="turf.dir">
+              <File Name="junction/build/Release/turf/CMakeFiles/turf.dir/link.txt"/>
+            </VirtualDirectory>
+          </VirtualDirectory>
+        </VirtualDirectory>
+        <VirtualDirectory Name="CMakeFiles">
+          <File Name="junction/build/Release/CMakeFiles/Makefile2"/>
+          <File Name="junction/build/Release/CMakeFiles/TargetDirectories.txt"/>
+          <File Name="junction/build/Release/CMakeFiles/feature_tests.cxx"/>
+          <File Name="junction/build/Release/CMakeFiles/feature_tests.c"/>
+          <VirtualDirectory Name="junction.dir">
+            <File Name="junction/build/Release/CMakeFiles/junction.dir/link.txt"/>
+          </VirtualDirectory>
+          <VirtualDirectory Name="3.10.3">
+            <VirtualDirectory Name="CompilerIdCXX">
+              <File Name="junction/build/Release/CMakeFiles/3.10.3/CompilerIdCXX/CMakeCXXCompilerId.cpp"/>
+            </VirtualDirectory>
+            <VirtualDirectory Name="CompilerIdC">
+              <File Name="junction/build/Release/CMakeFiles/3.10.3/CompilerIdC/CMakeCCompilerId.c"/>
+            </VirtualDirectory>
+          </VirtualDirectory>
+        </VirtualDirectory>
+      </VirtualDirectory>
+    </VirtualDirectory>
+    <VirtualDirectory Name="samples">
+      <VirtualDirectory Name="MapScalabilityTests">
+        <File Name="junction/samples/MapScalabilityTests/MapScalabilityTests.cpp"/>
+        <File Name="junction/samples/MapScalabilityTests/CMakeLists.txt"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="MapPerformanceTests">
+        <File Name="junction/samples/MapPerformanceTests/MapPerformanceTests.cpp"/>
+        <File Name="junction/samples/MapPerformanceTests/CMakeLists.txt"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="MapMemoryBench">
+        <File Name="junction/samples/MapMemoryBench/MapMemoryBench.cpp"/>
+        <File Name="junction/samples/MapMemoryBench/CMakeLists.txt"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="MapLinearizabilityTest">
+        <File Name="junction/samples/MapLinearizabilityTest/MapLinearizabilityTest.cpp"/>
+        <File Name="junction/samples/MapLinearizabilityTest/CMakeLists.txt"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="MapCorrectnessTests">
+        <File Name="junction/samples/MapCorrectnessTests/TestInsertSameKeys.h"/>
+        <File Name="junction/samples/MapCorrectnessTests/TestInsertDifferentKeys.h"/>
+        <File Name="junction/samples/MapCorrectnessTests/TestEnvironment.h"/>
+        <File Name="junction/samples/MapCorrectnessTests/TestDoubleAssign.h"/>
+        <File Name="junction/samples/MapCorrectnessTests/TestChurn.h"/>
+        <File Name="junction/samples/MapCorrectnessTests/MapCorrectnessTests.cpp"/>
+        <File Name="junction/samples/MapCorrectnessTests/CMakeLists.txt"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="MallocTest">
+        <File Name="junction/samples/MallocTest/MallocTest.cpp"/>
+        <File Name="junction/samples/MallocTest/CMakeLists.txt"/>
+      </VirtualDirectory>
+    </VirtualDirectory>
+    <VirtualDirectory Name="junction">
+      <File Name="junction/junction/SingleMap_Linear.h"/>
+      <File Name="junction/junction/SingleMap_Leapfrog.h"/>
+      <File Name="junction/junction/SimpleJobCoordinator.h"/>
+      <File Name="junction/junction/QSBR.h"/>
+      <File Name="junction/junction/QSBR.cpp"/>
+      <File Name="junction/junction/MapTraits.h"/>
+      <File Name="junction/junction/Core.h"/>
+      <File Name="junction/junction/ConcurrentMap_Linear.h"/>
+      <File Name="junction/junction/ConcurrentMap_Linear.cpp"/>
+      <File Name="junction/junction/ConcurrentMap_Leapfrog.h"/>
+      <File Name="junction/junction/ConcurrentMap_Leapfrog.cpp"/>
+      <File Name="junction/junction/ConcurrentMap_Grampa.h"/>
+      <File Name="junction/junction/ConcurrentMap_Grampa.cpp"/>
+      <File Name="junction/junction/ConcurrentMap_Crude.h"/>
+      <VirtualDirectory Name="striped">
+        <File Name="junction/junction/striped/Mutex.h"/>
+        <File Name="junction/junction/striped/ManualResetEvent.h"/>
+        <File Name="junction/junction/striped/ConditionPair.h"/>
+        <File Name="junction/junction/striped/ConditionBank.h"/>
+        <File Name="junction/junction/striped/ConditionBank.cpp"/>
+        <File Name="junction/junction/striped/AutoResetEvent.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="extra">
+        <File Name="junction/junction/extra/MemHook_TBB.cpp"/>
+        <File Name="junction/junction/extra/MemHook_NBDS.cpp"/>
+        <File Name="junction/junction/extra/MapAdapter.h"/>
+        <VirtualDirectory Name="impl">
+          <File Name="junction/junction/extra/impl/MapAdapter_Tervel.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_TBB.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_StdMap.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_Null.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_NBDS.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_Linear_RWLock.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_Linear_Mutex.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_Linear.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_LibCuckoo.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_Leapfrog_RWLock.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_Leapfrog.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_Grampa.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_Folly.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_Crude.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_CDS_Michael.h"/>
+          <File Name="junction/junction/extra/impl/MapAdapter_CDS_Cuckoo.h"/>
+        </VirtualDirectory>
+      </VirtualDirectory>
+      <VirtualDirectory Name="details">
+        <File Name="junction/junction/details/Linear.h"/>
+        <File Name="junction/junction/details/Linear.cpp"/>
+        <File Name="junction/junction/details/Leapfrog.h"/>
+        <File Name="junction/junction/details/Leapfrog.cpp"/>
+        <File Name="junction/junction/details/Grampa.h"/>
+        <File Name="junction/junction/details/Grampa.cpp"/>
+      </VirtualDirectory>
+    </VirtualDirectory>
+  </VirtualDirectory>
+  <VirtualDirectory Name="turf">
+    <File Name="turf/LICENSE"/>
+    <File Name="turf/CMakeLists.txt"/>
+    <VirtualDirectory Name="turf">
+      <File Name="turf/turf/Util.h"/>
+      <File Name="turf/turf/UTCTime.h"/>
+      <File Name="turf/turf/UTCTime.cpp"/>
+      <File Name="turf/turf/Trace.h"/>
+      <File Name="turf/turf/Thread.h"/>
+      <File Name="turf/turf/TLSPtr.h"/>
+      <File Name="turf/turf/TID.h"/>
+      <File Name="turf/turf/Semaphore.h"/>
+      <File Name="turf/turf/RaceDetector.h"/>
+      <File Name="turf/turf/RWLock.h"/>
+      <File Name="turf/turf/Mutex.h"/>
+      <File Name="turf/turf/MemPage.h"/>
+      <File Name="turf/turf/ManualResetEvent.h"/>
+      <File Name="turf/turf/Heap.h"/>
+      <File Name="turf/turf/Heap.cpp"/>
+      <File Name="turf/turf/Core.h"/>
+      <File Name="turf/turf/Core.cpp"/>
+      <File Name="turf/turf/ConditionVariable.h"/>
+      <File Name="turf/turf/CPUTimer.h"/>
+      <File Name="turf/turf/BitField.h"/>
+      <File Name="turf/turf/Atomic.h"/>
+      <File Name="turf/turf/Assert.h"/>
+      <File Name="turf/turf/Affinity.h"/>
+      <VirtualDirectory Name="impl">
+        <File Name="turf/turf/impl/Trace_Null.h"/>
+        <File Name="turf/turf/impl/Trace_Null.cpp"/>
+        <File Name="turf/turf/impl/Trace_MemLog.h"/>
+        <File Name="turf/turf/impl/Trace_MemLog.cpp"/>
+        <File Name="turf/turf/impl/Trace_Counters.h"/>
+        <File Name="turf/turf/impl/Trace_Counters.cpp"/>
+        <File Name="turf/turf/impl/Thread_Win32.h"/>
+        <File Name="turf/turf/impl/Thread_POSIX.h"/>
+        <File Name="turf/turf/impl/Thread_CPP11.h"/>
+        <File Name="turf/turf/impl/Thread_Boost.h"/>
+        <File Name="turf/turf/impl/TLSPtr_Win32.h"/>
+        <File Name="turf/turf/impl/TLSPtr_POSIX.h"/>
+        <File Name="turf/turf/impl/TLSPtr_Boost.h"/>
+        <File Name="turf/turf/impl/TID_Win32.h"/>
+        <File Name="turf/turf/impl/TID_POSIX.h"/>
+        <File Name="turf/turf/impl/TID_Mach.h"/>
+        <File Name="turf/turf/impl/Semaphore_Win32.h"/>
+        <File Name="turf/turf/impl/Semaphore_POSIX.h"/>
+        <File Name="turf/turf/impl/Semaphore_Mach.h"/>
+        <File Name="turf/turf/impl/RWLock_Win32.h"/>
+        <File Name="turf/turf/impl/RWLock_POSIX.h"/>
+        <File Name="turf/turf/impl/RWLock_CPP14.h"/>
+        <File Name="turf/turf/impl/Mutex_Win32.h"/>
+        <File Name="turf/turf/impl/Mutex_SpinLock.h"/>
+        <File Name="turf/turf/impl/Mutex_POSIX.h"/>
+        <File Name="turf/turf/impl/Mutex_LazyInit.h"/>
+        <File Name="turf/turf/impl/Mutex_CPP11.h"/>
+        <File Name="turf/turf/impl/Mutex_Boost.h"/>
+        <File Name="turf/turf/impl/MemPage_Win32.h"/>
+        <File Name="turf/turf/impl/MemPage_POSIX.h"/>
+        <File Name="turf/turf/impl/ManualResetEvent_Win32.h"/>
+        <File Name="turf/turf/impl/ManualResetEvent_CondVar.h"/>
+        <File Name="turf/turf/impl/Heap_DL.h"/>
+        <File Name="turf/turf/impl/Heap_DL.cpp"/>
+        <File Name="turf/turf/impl/Heap_CRT.h"/>
+        <File Name="turf/turf/impl/ConditionVariable_Win32.h"/>
+        <File Name="turf/turf/impl/ConditionVariable_POSIX.h"/>
+        <File Name="turf/turf/impl/ConditionVariable_CPP11.h"/>
+        <File Name="turf/turf/impl/CPUTimer_Win32.h"/>
+        <File Name="turf/turf/impl/CPUTimer_POSIX.h"/>
+        <File Name="turf/turf/impl/CPUTimer_Mach.h"/>
+        <File Name="turf/turf/impl/CPUTimer_GCC.h"/>
+        <File Name="turf/turf/impl/CPUTimer_CPP11.h"/>
+        <File Name="turf/turf/impl/Atomic_Native.h"/>
+        <File Name="turf/turf/impl/Atomic_CPP11.h"/>
+        <File Name="turf/turf/impl/Atomic_Boost.h"/>
+        <File Name="turf/turf/impl/Affinity_Win32.h"/>
+        <File Name="turf/turf/impl/Affinity_Win32.cpp"/>
+        <File Name="turf/turf/impl/Affinity_Null.h"/>
+        <File Name="turf/turf/impl/Affinity_Mach.h"/>
+        <File Name="turf/turf/impl/Affinity_Linux.h"/>
+        <File Name="turf/turf/impl/Affinity_Linux.cpp"/>
+        <File Name="turf/turf/impl/Affinity_FreeBSD.h"/>
+        <File Name="turf/turf/impl/Affinity_FreeBSD.cpp"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="extra">
+        <File Name="turf/turf/extra/UniqueSequence.h"/>
+        <File Name="turf/turf/extra/TimeWaster.h"/>
+        <File Name="turf/turf/extra/TimeWaster.cpp"/>
+        <File Name="turf/turf/extra/SpinKicker.h"/>
+        <File Name="turf/turf/extra/Random.h"/>
+        <File Name="turf/turf/extra/Random.cpp"/>
+        <File Name="turf/turf/extra/Options.h"/>
+        <File Name="turf/turf/extra/Options.cpp"/>
+        <File Name="turf/turf/extra/JobDispatcher.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="c">
+        <File Name="turf/turf/c/platform_detect.h"/>
+        <File Name="turf/turf/c/core.h"/>
+        <File Name="turf/turf/c/atomic.h"/>
+        <VirtualDirectory Name="impl">
+          <File Name="turf/turf/c/impl/compiler_msvc.h"/>
+          <File Name="turf/turf/c/impl/compiler_gcc.h"/>
+          <File Name="turf/turf/c/impl/atomic_msvc.h"/>
+          <File Name="turf/turf/c/impl/atomic_gcc_x86-64.h"/>
+          <File Name="turf/turf/c/impl/atomic_gcc_arm.h"/>
+          <File Name="turf/turf/c/impl/atomic_gcc_arm.c"/>
+        </VirtualDirectory>
+      </VirtualDirectory>
+    </VirtualDirectory>
+    <VirtualDirectory Name="samples">
+      <VirtualDirectory Name="SynchroTests">
+        <File Name="turf/samples/SynchroTests/TLSPtrTester.cpp"/>
+        <File Name="turf/samples/SynchroTests/SynchroTests.cpp"/>
+        <File Name="turf/samples/SynchroTests/SimpleRWLockTester.cpp"/>
+        <File Name="turf/samples/SynchroTests/RecursiveMutexTester.cpp"/>
+        <File Name="turf/samples/SynchroTests/RWLockTester.cpp"/>
+        <File Name="turf/samples/SynchroTests/MutexTester.cpp"/>
+        <File Name="turf/samples/SynchroTests/CMakeLists.txt"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="RandomTest">
+        <File Name="turf/samples/RandomTest/RandomTest.cpp"/>
+        <File Name="turf/samples/RandomTest/CMakeLists.txt"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="AtomicTests">
+        <File Name="turf/samples/AtomicTests/CMakeLists.txt"/>
+      </VirtualDirectory>
+    </VirtualDirectory>
+  </VirtualDirectory>
+  <VirtualDirectory Name="httest">
+    <File Name="test_ints2.h"/>
+    <File Name="openaddr.h"/>
+    <File Name="chaintableV.h"/>
+    <File Name="mmapquadtableCU.h"/>
+    <File Name="insituQ32.h"/>
+    <File Name="myvector.h"/>
+    <File Name="test_vectors.h"/>
+    <File Name="murmurhash.cpp"/>
+    <File Name="dbs-ll.cpp"/>
+    <File Name="dbs-ll.c"/>
+    <File Name="dbs-ll.h"/>
+    <File Name="insitu32.h"/>
+    <File Name="key_accessor.h"/>
+    <File Name="mmapquadtableCUV.h"/>
+    <File Name="mmapquadtableC.h"/>
+    <File Name="chaintableslabUBVK.h"/>
+    <File Name="cachechain3UBVK.h"/>
+    <File Name="chaintableints.h"/>
+    <File Name="insituRevCasUBquad.h"/>
+    <File Name="insituUBquad.h"/>
+    <File Name="insituDCASUBquad.h"/>
+    <File Name="insituDCASUB.h"/>
+    <File Name="insituRevCasUB.h"/>
+    <File Name="insituUB.h"/>
+    <File Name="flat_hash_map.hpp"/>
+    <File Name="bytell_hash_map.hpp"/>
+    <File Name="mmaptableUBdcas.h"/>
+    <File Name="mmaptableUB.h"/>
+    <File Name="mmapquadtableset.h"/>
+    <File Name="chaintableUBVK.h"/>
+    <File Name="mmapmmap.h"/>
+    <File Name="SYLVAN_TABLE.cpp"/>
+    <File Name="SYLVAN_TABLE.h"/>
+    <File Name="mmapper.h"/>
+    <File Name="chaintableUB.h"/>
+    <File Name="mystring.h"/>
+    <File Name="test_words.h"/>
+    <File Name="cachechain3upperbits.h"/>
+    <File Name="cachechain3vkeysize.h"/>
+    <File Name="cachechain3adaptiveconfig.h"/>
+    <File Name="wrappers.h"/>
+    <File Name="cachechain2config.h"/>
+    <File Name="cachechain3.h"/>
+    <File Name="tls.h"/>
+    <File Name="allocator.h"/>
+    <File Name="murmurhash.h"/>
+    <File Name="test_ints.h"/>
+    <File Name="mmapcache.h"/>
+    <File Name="mmapquadtable.h"/>
+    <File Name="cachechain2.h"/>
+    <File Name="test_strings.h"/>
+    <File Name="cachechain.h"/>
+    <File Name="chaintablegeneric.h"/>
+    <File Name="mmaptable.h"/>
+    <File Name="chaintable.h"/>
+    <File Name="CMakeLists.txt"/>
+    <File Name="httest.cpp"/>
+    <File Name="hashtable.h"/>
+    <File Name="hashtable.c"/>
+  </VirtualDirectory>
+  <VirtualDirectory Name="CLHT">
+    <File Name="CLHT/clht_lf_res"/>
+    <File Name="CLHT/clht_lb_res"/>
+    <File Name="CLHT/clht_lf"/>
+    <File Name="CLHT/clht_lf_only_map_rem"/>
+    <File Name="CLHT/clht_lb_nn"/>
+    <File Name="CLHT/LICENSE"/>
+    <File Name="CLHT/clht_lb_packed"/>
+    <File Name="CLHT/Makefile"/>
+    <File Name="CLHT/clht_lb_linked"/>
+    <File Name="CLHT/clht_lb"/>
+    <VirtualDirectory Name="scripts">
+      <File Name="CLHT/scripts/events_all"/>
+      <File Name="CLHT/scripts/unlock_exec"/>
+      <File Name="CLHT/scripts/lock_exec"/>
+      <File Name="CLHT/scripts/config"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="src">
+      <File Name="CLHT/src/measurements.c"/>
+      <File Name="CLHT/src/clht_lb.c"/>
+      <File Name="CLHT/src/clht_lf_only_map_rem.c"/>
+      <File Name="CLHT/src/clht_lf.c"/>
+      <File Name="CLHT/src/clht_lb_lock_ins.c"/>
+      <File Name="CLHT/src/clht_lb_linked.c"/>
+      <File Name="CLHT/src/clht_gc.c"/>
+      <File Name="CLHT/src/clht_lb_res.c"/>
+      <File Name="CLHT/src/clht_lb_packed.c"/>
+      <File Name="CLHT/src/clht_lf_res.c"/>
+      <File Name="CLHT/src/clht_lb_res_no_next.c"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="external">
+      <VirtualDirectory Name="ssmem">
+        <File Name="CLHT/external/ssmem/LICENSE"/>
+        <File Name="CLHT/external/ssmem/Makefile"/>
+        <VirtualDirectory Name="src">
+          <File Name="CLHT/external/ssmem/src/ssmem_test.c"/>
+          <File Name="CLHT/external/ssmem/src/ssmem.c"/>
+        </VirtualDirectory>
+        <VirtualDirectory Name="include">
+          <File Name="CLHT/external/ssmem/include/ssmem.h"/>
+          <File Name="CLHT/external/ssmem/include/utils.h"/>
+        </VirtualDirectory>
+      </VirtualDirectory>
+      <VirtualDirectory Name="sspfd">
+        <File Name="CLHT/external/sspfd/sspfd.c"/>
+        <File Name="CLHT/external/sspfd/Makefile"/>
+        <File Name="CLHT/external/sspfd/sspfd.h"/>
+        <File Name="CLHT/external/sspfd/sspfd_test.c"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="include">
+        <File Name="CLHT/external/include/ssmem.h"/>
+        <File Name="CLHT/external/include/utils.h"/>
+        <File Name="CLHT/external/include/sspfd.h"/>
+      </VirtualDirectory>
+    </VirtualDirectory>
+    <VirtualDirectory Name="include">
+      <File Name="CLHT/include/common.h"/>
+      <File Name="CLHT/include/clht_lb_linked.h"/>
+      <File Name="CLHT/include/clht_lb_packed.h"/>
+      <File Name="CLHT/include/latency.h"/>
+      <File Name="CLHT/include/clht_lb_res.h"/>
+      <File Name="CLHT/include/measurements.h"/>
+      <File Name="CLHT/include/clht_lf_only_map_rem.h"/>
+      <File Name="CLHT/include/clht_lb.h"/>
+      <File Name="CLHT/include/clht_lb_lock_ins.h"/>
+      <File Name="CLHT/include/atomic_ops.h"/>
+      <File Name="CLHT/include/clht_lf.h"/>
+      <File Name="CLHT/include/prand.h"/>
+      <File Name="CLHT/include/clht_lf_res.h"/>
+      <File Name="CLHT/include/clht.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="bmarks">
+      <File Name="CLHT/bmarks/noise.c"/>
+      <File Name="CLHT/bmarks/math_cache.c"/>
+      <File Name="CLHT/bmarks/test.c"/>
+      <File Name="CLHT/bmarks/snap_stress.c"/>
+      <File Name="CLHT/bmarks/test_ro.c"/>
+      <File Name="CLHT/bmarks/test_mem.c"/>
+    </VirtualDirectory>
+  </VirtualDirectory>
+  <Description/>
+  <Dependencies/>
+  <Settings Type="Dynamic Library">
+    <GlobalSettings>
+      <Compiler Options="" C_Options="" Assembler="">
+        <IncludePath Value="."/>
+      </Compiler>
+      <Linker Options="">
+        <LibraryPath Value="."/>
+      </Linker>
+      <ResourceCompiler Options=""/>
+    </GlobalSettings>
+    <Configuration Name="Debug" CompilerType="gnu g++" DebuggerType="GNU gdb debugger" Type="Dynamic Library" BuildCmpWithGlobalSettings="append" BuildLnkWithGlobalSettings="append" BuildResWithGlobalSettings="append">
+      <Compiler Options="-g" C_Options="-g" Assembler="" Required="yes" PreCompiledHeader="" PCHInCommandLine="no" PCHFlags="" PCHFlagsPolicy="0">
+        <IncludePath Value="."/>
+      </Compiler>
+      <Linker Options="" Required="yes"/>
+      <ResourceCompiler Options="" Required="no"/>
+      <General OutputFile="" IntermediateDirectory="./Debug" Command="$(WorkspacePath)/cmake-build-$(WorkspaceConfiguration)/output/$(ProjectName)" CommandArguments="" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(IntermediateDirectory)" PauseExecWhenProcTerminates="yes" IsGUIProgram="no" IsEnabled="yes"/>
+      <BuildSystem Name="CMake"/>
+      <Environment EnvVarSetName="&lt;Use Defaults&gt;" DbgSetName="&lt;Use Defaults&gt;">
+        <![CDATA[]]>
+      </Environment>
+      <Debugger IsRemote="no" RemoteHostName="" RemoteHostPort="" DebuggerPath="" IsExtended="no">
+        <DebuggerSearchPaths/>
+        <PostConnectCommands/>
+        <StartupCommands/>
+      </Debugger>
+      <PreBuild/>
+      <PostBuild/>
+      <CustomBuild Enabled="yes">
+        <RebuildCommand/>
+        <CleanCommand>make clean</CleanCommand>
+        <BuildCommand>unset CC
+unset CXX
+[ ! -f build/$(ConfigurationName)/Makefile ] &amp;&amp; mkdir -p build/$(ConfigurationName) &amp;&amp; cd build/$(ConfigurationName) &amp;&amp; cmake ../.. -DCMAKE_BUILD_TYPE=$(ConfigurationName) -DWITH_LTSMIN=$HOME/development/projects/ltsmin &amp;&amp; cd ../..
+[ -f build/$(ConfigurationName)/Makefile ] &amp;&amp; cd build/$(ConfigurationName) &amp;&amp; make -j 8</BuildCommand>
+        <PreprocessFileCommand/>
+        <SingleFileCommand/>
+        <MakefileGenerationCommand/>
+        <ThirdPartyToolName>None</ThirdPartyToolName>
+        <WorkingDirectory>$(ProjectPath)</WorkingDirectory>
+      </CustomBuild>
+      <AdditionalRules>
+        <CustomPostBuild/>
+        <CustomPreBuild/>
+      </AdditionalRules>
+      <Completion EnableCpp11="no" EnableCpp14="no">
+        <ClangCmpFlagsC/>
+        <ClangCmpFlags/>
+        <ClangPP/>
+        <SearchPaths/>
+      </Completion>
+    </Configuration>
+    <Configuration Name="Release" CompilerType="gnu g++" DebuggerType="GNU gdb debugger" Type="Dynamic Library" BuildCmpWithGlobalSettings="append" BuildLnkWithGlobalSettings="append" BuildResWithGlobalSettings="append">
+      <Compiler Options="" C_Options="" Assembler="" Required="yes" PreCompiledHeader="" PCHInCommandLine="no" PCHFlags="" PCHFlagsPolicy="0">
+        <IncludePath Value="."/>
+      </Compiler>
+      <Linker Options="-O2" Required="yes"/>
+      <ResourceCompiler Options="" Required="no"/>
+      <General OutputFile="" IntermediateDirectory="./Release" Command="$(WorkspacePath)/cmake-build-$(WorkspaceConfiguration)/output/$(ProjectName)" CommandArguments="" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(IntermediateDirectory)" PauseExecWhenProcTerminates="yes" IsGUIProgram="no" IsEnabled="yes"/>
+      <BuildSystem Name="CMake"/>
+      <Environment EnvVarSetName="&lt;Use Defaults&gt;" DbgSetName="&lt;Use Defaults&gt;">
+        <![CDATA[]]>
+      </Environment>
+      <Debugger IsRemote="no" RemoteHostName="" RemoteHostPort="" DebuggerPath="" IsExtended="no">
+        <DebuggerSearchPaths/>
+        <PostConnectCommands/>
+        <StartupCommands/>
+      </Debugger>
+      <PreBuild/>
+      <PostBuild/>
+      <CustomBuild Enabled="yes">
+        <RebuildCommand/>
+        <CleanCommand>make clean</CleanCommand>
+        <BuildCommand>unset CC
+unset CXX
+[ ! -f build/$(ConfigurationName)/Makefile ] &amp;&amp; mkdir -p build/$(ConfigurationName) &amp;&amp; cd build/$(ConfigurationName) &amp;&amp; cmake ../.. -DCMAKE_BUILD_TYPE=$(ConfigurationName) -DWITH_LTSMIN=$HOME/development/projects/ltsmin &amp;&amp; cd ../..
+[ -f build/$(ConfigurationName)/Makefile ] &amp;&amp; cd build/$(ConfigurationName) &amp;&amp; make -j 8</BuildCommand>
+        <PreprocessFileCommand/>
+        <SingleFileCommand/>
+        <MakefileGenerationCommand/>
+        <ThirdPartyToolName>None</ThirdPartyToolName>
+        <WorkingDirectory>$(ProjectPath)</WorkingDirectory>
+      </CustomBuild>
+      <AdditionalRules>
+        <CustomPostBuild/>
+        <CustomPreBuild/>
+      </AdditionalRules>
+      <Completion EnableCpp11="yes" EnableCpp14="yes">
+        <ClangCmpFlagsC/>
+        <ClangCmpFlags/>
+        <ClangPP/>
+        <SearchPaths>$(ProjectPath)
+$(ProjectPath)/include
+$(ProjectPath)/libfrugi/include
+/home/bergfi/root/include
+/home/bergfi/development/projects/ltsmin/src/
+/home/bergfi/development/projects/divine/bricks/
+$(ProjectPath)/junction
+$(ProjectPath)/junction/build/Release/include
+$(ProjectPath)/libcuckoo/libcuckoo
+$(ProjectPath)/growt
+</SearchPaths>
+      </Completion>
+    </Configuration>
+  </Settings>
+</CodeLite_Project>

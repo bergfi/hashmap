@@ -1,0 +1,21 @@
+[submodule "turf"]
+	path = turf
+	url = https://github.com/preshing/turf.git
+[submodule "junction"]
+	path = junction
+	url = https://github.com/preshing/junction.git
+[submodule "libfrugi"]
+	path = libfrugi
+	url = https://github.com/bergfi/libfrugi.git
+[submodule "libcuckoo"]
+	path = libcuckoo
+	url = https://github.com/efficient/libcuckoo.git
+[submodule "CLHT"]
+	path = CLHT
+	url = https://github.com/LPD-EPFL/CLHT.git
+[submodule "Honeycomb"]
+	path = Honeycomb
+	url = https://github.com/Qarterd/Honeycomb.git
+[submodule "growt"]
+	path = growt
+	url = https://github.com/TooBiased/growt.git
