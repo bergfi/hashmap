@@ -37,7 +37,7 @@ struct my_string {
     my_string const& operator=(my_string const& other) {
         len = other.len;
         s = strndup(other.s, len);
-        *this;
+        return *this;
 //        total_copies++;
     }
 
@@ -45,6 +45,7 @@ struct my_string {
         abort();
         std::swap(s, other.s);
         std::swap(len, other.len);
+        return *this;
 //        total_moves++;
     }
 

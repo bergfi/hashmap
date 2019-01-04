@@ -25,7 +25,12 @@
 
 #include <dm/dm.h>
 #include <mc-lib/stats.h>
-#include <util-lib/fast_hash.h>
+//#include <util-lib/fast_hash.h>
+typedef uint64_t hash64_t;
+typedef hash64_t (*hash64_f)(const char *key, int len, unsigned int seed);
+
+// trace.h
+typedef size_t              ref_t;
 
 #define             DB_FULL -1
 #define             DB_NOT_FOUND -9

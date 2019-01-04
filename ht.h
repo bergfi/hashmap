@@ -16,7 +16,7 @@
 #define CACHE_LINE_SIZE_BP2 6
 #define CACHE_LINE_SIZE_IN_BYTES (1<<CACHE_LINE_SIZE_BP2)
 
-namespace openaddr {
+namespace genht {
 
 template<typename HT>
 struct COMP_KEY {
@@ -73,206 +73,244 @@ public:
     char _data[0];
 };
 
-template<typename HT>
-struct QuadraticCacheLinearBucketSearchStart0 {
+template<typename K, typename V>
+class HashTableEntryNext {
+public:
 
-    QuadraticCacheLinearBucketSearchStart0(HT& ht, size_t& e)
-        : _ht(ht)
-        , _e(e)
-        , _increment(0)
-        {
-        _e &= (HT::_entriesPerBucket-1);
+    HashTableEntryNext(size_t lengthKey, size_t lengthValue, const char* keyData, const char* valueData): _next(nullptr), _lengthKey(lengthKey), _lengthValue(lengthValue) {
+        memmove(_data, keyData, lengthKey);
+        memmove(_data+lengthKey, valueData, lengthValue);
     }
 
-    bool next(typename HT::key_type const& key, typename HT::HTE*& current, size_t const& h16l) {
-        current = _ht._map[_e].load(std::memory_order_relaxed);
+    size_t size() const {
+        return sizeof(HashTableEntryNext) + _lengthKey + _lengthValue;
+    }
+
+//    bool matches(size_t length, const char* keyData) const {
+//        if(_lengthKey != length) return false;
+//        return !memcmp(_data, keyData, length);
+//    }
+
+public:
+    HashTableEntryNext* _next;
+    __int32_t _lengthKey;
+    __int32_t _lengthValue;
+    char _data[0];
+};
+
+template<typename HT, typename HTE>
+struct BucketSearcher {
+
+    BucketSearcher(HT& ht)
+        : _ht(ht)
+        {
+    }
+
+    bool next() { abort(); return false; };
+    std::atomic<HTE*>& link() { abort(); return *((std::atomic<HTE*>*)nullptr); };
+
+    bool find(typename HT::key_type const& key, HTE*& current, size_t const& h16l) {
+        current = link().load(std::memory_order_relaxed); // TODO: move these to constructor
         while(current) {
             if(HT::KeyComparator::match(current, key, h16l)) {
                 current = _ht.getPtr(current);
                 return true;
             }
-            _e++;
-            if((_e & (HT::_entriesPerBucket-1)) == 0) {
-                _e += HT::_entriesPerBucket * (2 * _increment);
-                _e &= _ht._entriesMask;
-                _increment++;
-            }
-            current = _ht._map[_e].load(std::memory_order_relaxed);
+            next();
         }
         return false;
     }
-
     HT& _ht;
+
+    __attribute__((always_inline))
+    bool insert(HTE* current, HTE* hteWithHash) {
+        return link().compare_exchange_weak(current, hteWithHash, std::memory_order_release, std::memory_order_relaxed);
+    }
+};
+
+template<typename HT>
+struct OpenAddressing: public BucketSearcher<HT, HashTableEntry<typename HT::key_type, typename HT::value_type>> {
+    using HTE = HashTableEntry<typename HT::key_type, typename HT::value_type>;
+
+    OpenAddressing(HT& ht, size_t& e)
+        : BucketSearcher<HT, HashTableEntry<typename HT::key_type, typename HT::value_type>>(ht)
+        , _e(e)
+        {
+    }
+
+    std::atomic<HTE*>& link() {
+        return this->_ht._map[_e];
+    }
+
     size_t& _e;
+};
+
+template<typename HT>
+struct Chaining: public BucketSearcher<HT, HashTableEntry<typename HT::key_type, typename HT::value_type>> {
+    using HTE = HashTableEntryNext<typename HT::key_type, typename HT::value_type>;
+
+    Chaining(HT& ht, size_t& e)
+        : BucketSearcher<HT, HashTableEntry<typename HT::key_type, typename HT::value_type>>(ht)
+        {
+    }
+
+    std::atomic<HTE*>& link() {
+        return *_link;
+    }
+
+    std::atomic<HTE*>* _link;
+};
+
+template<typename HT>
+struct QuadraticCacheLinearBucketSearchStart0: public OpenAddressing<HT> {
+
+    QuadraticCacheLinearBucketSearchStart0(HT& ht, size_t& e)
+        : OpenAddressing<HT>(ht, e)
+        , _increment(0)
+        {
+        this->_e &= (HT::_entriesPerBucket-1);
+    }
+
+    __attribute__((always_inline))
+    void next() {
+        this->_e++;
+        if((this->_e & (HT::_entriesPerBucket-1)) == 0) {
+            this->_e += HT::_entriesPerBucket * (2 * _increment);
+            this->_e &= this->_ht._entriesMask;
+            _increment++;
+        }
+    }
+
     size_t _increment;
 };
 
 template<typename HT>
-struct LinearCacheLinearBucketSearchStart0 {
+struct LinearCacheLinearBucketSearchStart0: public OpenAddressing<HT> {
 
     LinearCacheLinearBucketSearchStart0(HT& ht, size_t& e)
-        : _ht(ht)
-        , _e(e)
+        : OpenAddressing<HT>(ht, e)
         , _end(e)
         {
-        _e &= (HT::_entriesPerBucket-1);
+        this->_e &= (HT::_entriesPerBucket-1);
     }
 
-    bool next(typename HT::key_type const& key, typename HT::HTE*& current, size_t const& h16l) {
-        current = _ht._map[_e].load(std::memory_order_relaxed);
-        while(current) {
-            if(HT::KeyComparator::match(current, key, h16l)) {
-                current = _ht.getPtr(current);
-                return true;
-            }
-            _e++;
-            _e &= _ht._entriesMask;
-            current = _ht._map[_e].load(std::memory_order_relaxed);
-        }
-        return false;
+    __attribute__((always_inline))
+    void next() {
+        this->_e++;
+        this->_e &= this->_ht._entriesMask;
     }
 
-    HT& _ht;
-    size_t& _e;
     size_t _end;
 };
 
 template<typename HT>
-struct QuadraticCacheLinearBucketSearch {
+struct QuadraticCacheLinearBucketSearch: public OpenAddressing<HT> {
 
     QuadraticCacheLinearBucketSearch(HT& ht, size_t& e)
-        : _ht(ht)
-        , _e(e)
+        : OpenAddressing<HT>(ht, e)
         , _base(e & ~(HT::_entriesPerBucket-1))
         , _increment(0)
         , _end(e & (HT::_entriesPerBucket-1))
         {
-//        _e -= _base;
     }
 
-    bool next(typename HT::key_type const& key, typename HT::HTE*& current, size_t const& h16l) {
-        current = _ht._map[_e].load(std::memory_order_relaxed);
-        while(current) {
-            if(HT::KeyComparator::match(current, key, h16l)) {
-                current = _ht.getPtr(current);
-                return true;
-            }
-            _e -= _base;
-            _e = (_e+1) & (HT::_entriesPerBucket-1);
-            if(_e==_end) {
-                _base += HT::_entriesPerBucket * (2 * _increment + 1);
-                _base &= _ht._entriesMask;
-                _increment++;
-            }
-            _e += _base;
-            current = _ht._map[_e].load(std::memory_order_relaxed);
+    __attribute__((always_inline))
+    void next() {
+        this->_e -= _base;
+        this->_e = (this->_e+1) & (HT::_entriesPerBucket-1);
+        if(this->_e==_end) {
+            _base += HT::_entriesPerBucket * (2 * _increment + 1);
+            _base &= this->_ht._entriesMask;
+            _increment++;
         }
-        return false;
+        this->_e += _base;
     }
 
-    HT& _ht;
-    size_t& _e;
     size_t _base;
     size_t _increment;
     size_t _end;
 };
 
 template<typename HT>
-struct LinearCacheLinearBucketSearch {
+struct LinearCacheLinearBucketSearch: public OpenAddressing<HT> {
 
     LinearCacheLinearBucketSearch(HT& ht, size_t& e)
-        : _ht(ht)
-        , _e(e)
+        : OpenAddressing<HT>(ht, e)
         , _base(e & ~(HT::_entriesPerBucket-1))
         , _increment(0)
         , _end(e)
         {
-//        _e -= _base;
     }
 
-    bool next(typename HT::key_type const& key, typename HT::HTE*& current, size_t const& h16l) {
-        current = _ht._map[_e].load(std::memory_order_relaxed);
-        while(current) {
-            if(HT::KeyComparator::match(current, key, h16l)) {
-                current = _ht.getPtr(current);
-                return true;
-            }
-            _e -= _base;
-            _e = (_e+1) & (HT::_entriesPerBucket-1);
-            if(_e==_end) {
-                _base += HT::_entriesPerBucket;
-                _base &= _ht._entriesMask;
-                _increment++;
-            }
-            _e += _base;
-            current = _ht._map[_e].load(std::memory_order_relaxed);
+    __attribute__((always_inline))
+    void next() {
+        this->_e -= _base;
+        this->_e = (this->_e+1) & (HT::_entriesPerBucket-1);
+        if(this->_e==_end) {
+            _base += HT::_entriesPerBucket;
+            _base &= this->_ht._entriesMask;
+            _increment++;
         }
-        return false;
+        this->_e += _base;
     }
 
-    HT& _ht;
-    size_t& _e;
     size_t _base;
     size_t _increment;
     size_t _end;
 };
 
 template<typename HT>
-struct QuadraticSearch {
+struct QuadraticSearch: public OpenAddressing<HT> {
 
     QuadraticSearch(HT& ht, size_t& e)
-        : _ht(ht)
-        , _e(e)
+        : OpenAddressing<HT>(ht, e)
         , _increment(0)
         {
-//        _e -= _base;
     }
 
-    bool next(typename HT::key_type const& key, typename HT::HTE*& current, size_t const& h16l) {
-        current = _ht._map[_e].load(std::memory_order_relaxed);
-        while(current) {
-            if(HT::KeyComparator::match(current, key, h16l)) {
-                current = _ht.getPtr(current);
-                return true;
-            }
-            _e += 2 * _increment + 1;
-            _e &= _ht._entriesMask;
-            _increment++;
-            current = _ht._map[_e].load(std::memory_order_relaxed);
-        }
-        return false;
+    __attribute__((always_inline))
+    void next() {
+        this->_e += 2 * _increment + 1;
+        this->_e &= this->_ht._entriesMask;
+        _increment++;
     }
 
-    HT& _ht;
-    size_t& _e;
     size_t _increment;
 };
 
 template<typename HT>
-struct LinearSearch {
+struct LinearSearch: public OpenAddressing<HT> {
 
     LinearSearch(HT& ht, size_t& e)
-        : _ht(ht)
-        , _e(e)
+        : OpenAddressing<HT>(ht, e)
         {
-//        _e -= _base;
     }
 
-    bool next(typename HT::key_type const& key, typename HT::HTE*& current, size_t const& h16l) {
-        current = _ht._map[_e].load(std::memory_order_relaxed);
-        while(current) {
-            if(HT::KeyComparator::match(current, key, h16l)) {
-                current = _ht.getPtr(current);
-                return true;
-            }
-            _e = (_e+1) & _ht._entriesMask;
-            current = _ht._map[_e].load(std::memory_order_relaxed);
-        }
-        return false;
+    __attribute__((always_inline))
+    void next() {
+        this->_e = (this->_e+1) & this->_ht._entriesMask;
     }
 
-    HT& _ht;
-    size_t& _e;
+};
+
+template<typename HT>
+struct ChainSearch: public Chaining<HT> {
+
+    ChainSearch(HT& ht, size_t& e)
+        : Chaining<HT>(ht, e)
+        {
+    }
+
+    __attribute__((always_inline))
+    void next() {
+    }
+
+};
+
+template<typename HT>
+struct SingleBucket {
+
+    std::atomic<typename HT::HTE*> _bucket;
 };
 
 template< typename K
@@ -281,21 +319,24 @@ template< typename K
         , template<typename> typename KEY_COMP = COMP_KEY_AND_HASH
         , template<typename> typename DATA_ACCESSOR = hashtables::key_accessor
         , template<typename> typename BUCKET_SEARCH = QuadraticCacheLinearBucketSearch
+        , template<typename> typename BUCKET = SingleBucket
         >
 class HashTable {
 public:
 
-    using HTE = HashTableEntry<K, V>;
+    using key_type = K;
+    using value_type = V;
+
     using AccessorKey = DATA_ACCESSOR<K>;
     using AccessorValue = DATA_ACCESSOR<V>;
     using KeyComparator = KEY_COMP<HashTable>;
     using Hasher = HASHER<K>;
     using BucketSearcher = BUCKET_SEARCH<HashTable>;
+    using HTE = typename BucketSearcher::HTE;
+    using Bucket = BUCKET<HashTable>;
 
     friend BucketSearcher;
-
-    using key_type = K;
-    using value_type = V;
+    friend Bucket;
 
     HashTable(size_t bucketsScale)
     : _bucketsScale(bucketsScale)
@@ -329,11 +370,11 @@ public:
         size_t h16l = KeyComparator::hash16LeftFromHash(h);
         size_t e = entryFromhash(h);
 
-        BucketSearcher search(*this, e);
+        BucketSearcher searcher(*this, e);
 
-        HashTableEntry<K,V>* current = nullptr;
+        HTE* current = nullptr;
 
-        if(search.next(key, current, h16l)) {
+        if(searcher.find(key, current, h16l)) {
             return *(V*)(current->_data + current->_lengthKey);
         }
 
@@ -341,10 +382,10 @@ public:
         const char* keyData = AccessorKey::data(key);
         size_t valueLength = AccessorValue::size(value);
         const char* valueData = AccessorValue::data(value);
-        HashTableEntry<K,V>* hte = createHTE(keyLength, valueLength, keyData, valueData);
-        HashTableEntry<K,V>* hteWithHash = makePtrWithHash(hte, h16l);
-        while(!_map[e].compare_exchange_weak(current, hteWithHash, std::memory_order_release, std::memory_order_relaxed)) {
-            if(search.next(key, current, h16l)) {
+        HTE* hte = createHTE(keyLength, valueLength, keyData, valueData);
+        HTE* hteWithHash = makePtrWithHash(hte, h16l);
+        while(!searcher.insert(current, hteWithHash)) {
+            if(searcher.find(key, current, h16l)) {
                 return *(V*)(current->_data + current->_lengthKey);
             }
         }
@@ -356,11 +397,11 @@ public:
         size_t h16l = KeyComparator::hash16LeftFromHash(h);
         size_t e = entryFromhash(h);
 
-        BucketSearcher search(*this, e);
+        BucketSearcher searcher(*this, e);
 
-        HashTableEntry<K,V>* current = nullptr;
+        HTE* current = nullptr;
 
-        if(search.next(key, current, h16l)) {
+        if(searcher.find(key, current, h16l)) {
             value = *(V*)(current->_data + current->_lengthKey);
             return true;
         } else {
@@ -376,9 +417,9 @@ public:
         return MurmurHash64(key);
     }
 
-    size_t bucketSize(std::atomic<HashTableEntry<K,V>*>* bucket) {
+    size_t bucketSize(Bucket* bucket) {
         size_t s = 0;
-        HashTableEntry<K,V>* current = bucket->load(std::memory_order_relaxed);
+        HTE* current = bucket->_bucket.load(std::memory_order_relaxed);
         while(current) {
             s++;
             current = current->getNext();
@@ -388,8 +429,8 @@ public:
 
     size_t size() {
         size_t s = 0;
-        std::atomic<HashTableEntry<K,V>*>* bucket = _map;
-        std::atomic<HashTableEntry<K,V>*>* end = _map + _buckets;
+        Bucket* bucket = _map;
+        Bucket* end = _map + _buckets;
         while(bucket < end) {
             s += bucketSize(bucket);
             bucket++;
@@ -406,7 +447,7 @@ public:
         _slabManager.thread_init();
     }
 
-    HashTableEntry<K,V>* createHTE(size_t keyLength, size_t valueLength, const char* keyData, const char* valueData) {
+    HTE* createHTE(size_t keyLength, size_t valueLength, const char* keyData, const char* valueData) {
         HTE* hte = new(_slabManager.alloc<4>(sizeof(HTE) + keyLength + valueLength)) HTE(keyLength, valueLength, keyData, valueData);
         return hte;
     }
@@ -429,7 +470,7 @@ public:
                 size_t bucketSize = 0;
 
                 for(size_t b = 0; b < _entriesPerBucket; ++b) {
-                    if(_map[idx+b].load(std::memory_order_relaxed)) {
+                    if(_map[idx+b]._bucket.load(std::memory_order_relaxed)) {
                         bucketSize++;
                     }
                 }
@@ -462,7 +503,7 @@ public:
             size_t bucketSize = 0;
 
             for(size_t b = 0; b < _entriesPerBucket; ++b) {
-                if(_map[idx+b].load(std::memory_order_relaxed)) {
+                if(_map[idx+b]._bucket.load(std::memory_order_relaxed)) {
                     bucketSize++;
                 }
             }
@@ -487,7 +528,7 @@ private:
     size_t const _bucketsMask;
     size_t const _entries;
     size_t const _entriesMask;
-    std::atomic<HashTableEntry<K,V>*>* _map;
+    Bucket* _map;
     SlabManager _slabManager;
 
 private:

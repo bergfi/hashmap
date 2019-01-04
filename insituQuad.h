@@ -13,7 +13,7 @@
 #include "mmapper.h"
 #include "murmurhash.h"
 
-namespace insituUBquad {
+namespace insituQuad {
 
 template<typename K, typename V>
 class HashTableEntry {
@@ -63,7 +63,6 @@ public:
     size_t insert(K const& key, V const& value) {
 //        printf("key:   %zx\n", key);
         size_t h = hash(key);
-        size_t h16l = hash16LeftFromHash(h);
         size_t e = entryFromhash(h);
 //        printf("entry: %zx\n", e);
         HashTableEntry<K,V>* current = &_map[e];
@@ -73,37 +72,32 @@ public:
         size_t inc = 1;
 
         size_t oldKey;
-        size_t newKey = key | h16l;
+        size_t k;
         do {
             oldKey = 0ULL;
             while(true) {
-                size_t kAndHash = current->_key.load(std::memory_order_relaxed);
+                k = (K)current->_key.load(std::memory_order_relaxed);
                 //printf("checking existing entry: %zx\n", kAndHash); fflush(stdout);
-                if(kAndHash == 0ULL) break;
-                size_t currentHash = getHash(kAndHash);
-                K k = getPtr(kAndHash);
-                if(currentHash == h16l) {
-                    if(k == key) {
-                        std::atomic_thread_fence(std::memory_order_acquire);
-                        while(true) {
-                            size_t v = current->_value.load(std::memory_order_relaxed);
-                            if(v) return v;
-                            _mm_pause();
-                        }
+                if(k == 0ULL) break;
+                if((K)k == key) {
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                    while(true) {
+                        size_t v = current->_value.load(std::memory_order_relaxed);
+                        if(v) return v;
+                        _mm_pause();
                     }
                 }
                 e = (eFirst+inc*inc) & _entriesMask;
                 inc++;
                 current = &_map[e];
             }
-        } while(!current->_key.compare_exchange_strong(oldKey, newKey, std::memory_order_release, std::memory_order_relaxed));
+        } while(!current->_key.compare_exchange_strong(oldKey, k, std::memory_order_release, std::memory_order_relaxed));
         current->_value.store(value, std::memory_order_relaxed);
         return value;
     }
 
     bool get(K const& key, V& value) {
         size_t h = hash(key);
-        size_t h16l = hash16LeftFromHash(h);
         size_t e = entryFromhash(h);
 //        printf("entry: %zx\n", e);
         HashTableEntry<K,V>* current = &_map[e];
@@ -114,22 +108,18 @@ public:
 
         while(true) {
 //            printf("checking existing entry: %zx -> %zx\n", current->_key, current->_value);
-            size_t kAndHash = current->_key.load(std::memory_order_relaxed);
-            if(kAndHash == 0ULL) break;
+            K k = current->_key.load(std::memory_order_relaxed);
+            if(k == 0ULL) break;
 
-            size_t currentHash = getHash(kAndHash);
-            K k = getPtr(kAndHash);
-            if(currentHash == h16l) {
-                if(k == key) {
-                    std::atomic_thread_fence(std::memory_order_acquire);
-                    while(true) {
-                        size_t v = current->_value.load(std::memory_order_relaxed);
-                        if(v) {
-                            value = v;
-                            return true;
-                        }
-                        _mm_pause();
+            if(k == key) {
+                std::atomic_thread_fence(std::memory_order_acquire);
+                while(true) {
+                    size_t v = current->_value.load(std::memory_order_relaxed);
+                    if(v) {
+                        value = v;
+                        return true;
                     }
+                    _mm_pause();
                 }
             }
             e = (eFirst+inc*inc) & _entriesMask;
@@ -138,12 +128,6 @@ public:
         }
 
         return false;
-    }
-
-    size_t hash16LeftFromHash(size_t h) const {
-//        h ^= h << 32ULL;
-//        h ^= h << 16ULL;
-        return h & 0xFFFF000000000000ULL;
     }
 
     size_t entryFromhash(size_t const& h) {

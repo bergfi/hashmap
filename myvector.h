@@ -63,9 +63,13 @@ namespace hashtables {
 
 template<>
 struct key_accessor<myvector> {
+
+    __attribute__((always_inline))
     static const char* data(myvector const& key) {
         return (const char*)key.data;
     }
+
+    __attribute__((always_inline))
     static size_t size(myvector const& key) {
         return key.size;
     }

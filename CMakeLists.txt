@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
+cmake_host_system_information(RESULT HOSTNAME QUERY HOSTNAME)
 
 project (httest)
 
@@ -36,6 +37,10 @@ add_executable(httest
 )
 set_property(TARGET httest PROPERTY CXX_STANDARD 14)
 set_property(TARGET httest PROPERTY CXX_STANDARD_REQUIRED ON)
+
+#    libcds/src/thread_data.cpp
+#    libcds/src/init.cpp
+#    libcds/src/topology_linux.cpp
 
 add_definitions(-Wall -Wextra -Wno-vla -Wno-implicit-fallthrough -Wno-unused-parameter)
 
@@ -78,6 +83,24 @@ else()
 	set(HAVE_DIVINE 0)
 endif()
 
+set(WITH_VTUNE "" CACHE FILEPATH "Path to VTUNE install directory")
+set(VTUNE_LIB "" CACHE FILEPATH "Path to VTUNE ittnotify library")
+if(WITH_VTUNE)
+    if(EXISTS "${WITH_VTUNE}/amplxe-vars.sh")
+        include_directories(
+            "${WITH_VTUNE}/include"
+        )
+        #find_library(VTUNE_LIB ittnotify PATHS "${WITH_VTUNE}/lib32" "${WITH_VTUNE}/lib64")
+        target_link_libraries(httest "${WITH_VTUNE}/lib64/libittnotify.a")
+        set(HAVE_VTUNE 1)
+    else()
+        message(SEND_ERROR "${WITH_VTUNE} does not contain VTune")
+    endif()
+else()
+#    message(SEND_ERROR "Please specify root source directory of DIVINE using -DWITH_DIVINE=...")
+	set(HAVE_VTUNE 0)
+endif()
+
 include_directories(
     "CLHT/include"
     "${WITH_DIVINE}/bricks"
@@ -92,16 +115,47 @@ include_directories(
     "libfrugi/include"
     "libcuckoo/libcuckoo"
     "growt"
+    "libcds"
+    "libcds/test/include"
+    "folly"
+    "sparsehash-c11"
 )
 
 add_subdirectory("junction")
 add_subdirectory("libcuckoo")
 add_subdirectory("growt")
+add_subdirectory("libcds")
+add_subdirectory("folly")
+add_subdirectory("sparsehash-c11")
+
+#add_custom_command(
+#    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/tbb/release/libtbb.so
+#    COMMAND make && mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/tbb/release && cp ${CMAKE_CURRENT_SOURCE_DIR}/tbb/build/*_release/lib*.so ${CMAKE_CURRENT_BINARY_DIR}/tbb/release
+#    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tbb
+#)
+#add_custom_target(tbbproject DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/tbb/release/libtbb.so)
+
+add_dependencies(httest tbbproject)
+
+set(TBB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tbb/cmake)
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH};${CMAKE_CURRENT_SOURCE_DIR}/tbb/cmake)
+set(TBB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/tbb)
+
+# TBB does not integrate properly with CMake, we need to make some adjustments
+include(${TBB_DIR}/TBBBuild.cmake)
+if("${HOSTNAME}" STREQUAL "caserta")
+    tbb_build(TBB_ROOT ${TBB_ROOT} CONFIG_DIR TBB_DIR MAKE_ARGS compiler=${CMAKE_C_COMPILER})
+else()
+    tbb_build(TBB_ROOT ${TBB_ROOT} CONFIG_DIR TBB_DIR)
+endif()
+find_package(TBB)
 
 add_dependencies(httest junction)
 add_dependencies(httest libcuckoo)
+add_dependencies(httest cds)
+add_dependencies(httest folly)
+add_dependencies(httest sparsehash-c11)
 
-set(LIBRARIES numa tbb tbbmalloc junction turf dl atomic libcuckoo)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/CLHT/libclht.a)
 	target_link_libraries(httest -Wl,-E -fPIC
 		${CMAKE_CURRENT_SOURCE_DIR}/CLHT/libclht.a
@@ -112,13 +166,21 @@ else()
 	set(HAVE_CLHT 0)
 endif()
 
-target_link_libraries(httest -Wl,-E -fPIC ${LIBRARIES})
+target_link_libraries(httest -Wl,-E -fPIC numa junction turf dl atomic libcuckoo
+ folly
+ cds
+ ${TBB_IMPORTED_TARGETS}
+)
 
 install (TARGETS httest DESTINATION bin)
 
+message(STATUS "Host: ${HOSTNAME}")
 message(STATUS "Available: ${CMAKE_CONFIGURATION_TYPES}")
 message(STATUS "Building configuration: ${CMAKE_BUILD_TYPE}")
 message(STATUS "    C flags: ${CMAKE_C_FLAGS}")
 message(STATUS "  CXX flags: ${CMAKE_CXX_FLAGS}")
-
-configure_file(config.h.in config.h)
+message(STATUS "        TBB: ${TBB_IMPORTED_TARGETS}")
+if(HAVE_VTUNE)
+    message(STATUS "      VTune: ${WITH_VTUNE}, libs: ${VTUNE_LIB}")
+endif()
+configure_file(config.h.in httestconfig.h)

@@ -19,3 +19,18 @@
 [submodule "growt"]
 	path = growt
 	url = https://github.com/TooBiased/growt.git
+[submodule "tbb"]
+	path = tbb
+	url = https://github.com/01org/tbb.git
+[submodule "libcds"]
+	path = libcds
+	url = https://github.com/khizmax/libcds.git
+[submodule "googletest"]
+	path = googletest
+	url = https://github.com/google/googletest
+[submodule "folly"]
+	path = folly
+	url = https://github.com/facebook/folly.git
+[submodule "sparsehash-c11"]
+	path = sparsehash-c11
+	url = https://github.com/sparsehash/sparsehash-c11/

@@ -93,9 +93,7 @@ public:
                 current = &_map[e];
             }
         } while(!current->_key.compare_exchange_strong(oldKey, newKey, std::memory_order_release, std::memory_order_relaxed));
-        size_t oldValue = 0ULL;
-        size_t newValue = value;
-        current->_value.compare_exchange_strong(oldValue, newValue, std::memory_order_relaxed, std::memory_order_relaxed);
+        current->_value.store(value, std::memory_order_relaxed);
         return value;
     }
 

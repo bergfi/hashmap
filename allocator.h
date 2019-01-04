@@ -105,10 +105,11 @@ public:
     SlabManager()
     : _allSlabs(nullptr)
     {
-
+//        std::cout << this << " SlabManager " << inUse() << std::endl;
     }
 
     ~SlabManager() {
+//        std::cout << this << " ~SlabManager " << inUse() << std::endl;
         auto current = _allSlabs.load(std::memory_order_relaxed);
         while(current) {
             auto next = current->next;
@@ -122,7 +123,7 @@ public:
     T* alloc() {
         slab* mySlab = _slab;
         if(mySlab->nextentry + sizeof(T) > mySlab->end) {
-            mySlab = linkNewSlab();
+            mySlab = linkNewSlab(sizeof(T));
             _slab = mySlab;
         }
         auto r = mySlab->alloc<T>();
@@ -139,11 +140,7 @@ public:
     template<int alignPowerTwo>
     __attribute__((always_inline))
     char* alloc(size_t size) {
-        slab* mySlab = _slab;
-        if(mySlab->nextentry + size > mySlab->end) {
-            mySlab = linkNewSlab();
-            _slab = mySlab;
-        }
+        slab* mySlab = ensureSlab(size);
         auto r = mySlab->alloc<alignPowerTwo>(size);
         assert(r);
         return r;
@@ -154,10 +151,23 @@ public:
         return _slab->free(mem, length);
     }
 
-    slab* linkNewSlab() {
+    __attribute__((always_inline))
+    slab* ensureSlab(size_t size) {
+        slab* mySlab = _slab;
+        if(mySlab == nullptr || mySlab->nextentry + size > mySlab->end) {
+            slab* oldSlab = mySlab;
+            mySlab = linkNewSlab(size);
+            _slab = mySlab;
+//            std::cout << "new slab " << mySlab << ", old slab " << oldSlab << std::endl;
+        }
+        return mySlab;
+    }
+
+    slab* linkNewSlab(size_t minimum_size) {
         //assert(!_slab.get());
         Settings& settings = Settings::global();
-        auto mySlab = new slab(_allSlabs.load(std::memory_order_relaxed), 1ULL << (settings["buckets_scale"].asUnsignedValue()+2));
+        size_t size = 1ULL << (settings["buckets_scale"].asUnsignedValue()+2);
+        auto mySlab = new slab(_allSlabs.load(std::memory_order_relaxed), std::max(size, minimum_size));
         _slab = mySlab;
         while(!_allSlabs.compare_exchange_weak(mySlab->next, mySlab, std::memory_order_release, std::memory_order_relaxed)) {
         }
@@ -166,10 +176,135 @@ public:
 
     __attribute__((always_inline))
     void thread_init() {
-        linkNewSlab();
+        linkNewSlab(0);
     }
+
+    __attribute__((always_inline))
+    bool inUse() const {
+        return _allSlabs != nullptr;
+    }
+
 private:
 //    static TLS<slab> _slab;
     static __thread slab* _slab;
     std::atomic<slab*> _allSlabs;
 };
+
+template<typename T>
+class SlabPerThreadAllocator {
+public:
+    typedef T value_type;
+    typedef value_type* pointer;
+    typedef const value_type* const_pointer;
+    typedef value_type& reference;
+    typedef const value_type& const_reference;
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    template<class U> struct rebind {
+        typedef SlabPerThreadAllocator<U> other;
+    };
+
+    SlabPerThreadAllocator() {
+    }
+
+    SlabPerThreadAllocator(const SlabPerThreadAllocator<T>& other) throw() {
+        assert(!other.inUse());
+    }
+
+    template<typename U> SlabPerThreadAllocator(const SlabPerThreadAllocator<U>& other) throw() {
+        assert(!other.inUse());
+    }
+
+    template<typename U> SlabPerThreadAllocator(SlabPerThreadAllocator<U>&& other) throw() {
+        assert(!other.inUse());
+    }
+
+    void operator=(const SlabPerThreadAllocator<T>& other) {
+        assert(!other.inUse());
+    }
+
+    void operator=(SlabPerThreadAllocator<T>&& other) {
+        assert(!other.inUse());
+    }
+
+    void destroy(pointer p) {
+        ((T*)p)->~T();
+    }
+
+    void deallocate(pointer p, size_type n) {
+        (void)p;
+        (void)n;
+    }
+
+    pointer allocate(size_type n, const void* /*hint*/ =0 ) {
+        size_t bytes = n*sizeof(T);
+        char* r = sm.alloc<16>(bytes);
+//        std::cout << "allocate << " << bytes << ": " << (void*)r << " - " << (void*)(r+bytes) << std::endl;
+        return (pointer)r;
+    }
+
+    bool inUse() const {
+        return sm.inUse();
+    }
+private:
+    SlabManager sm;
+};
+
+template<typename T>
+class StatelessSlabPerThreadAllocator {
+public:
+    static SlabPerThreadAllocator<T> allocator;
+
+    typedef T value_type;
+    typedef value_type* pointer;
+    typedef const value_type* const_pointer;
+    typedef value_type& reference;
+    typedef const value_type& const_reference;
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    template<class U> struct rebind {
+        typedef StatelessSlabPerThreadAllocator<U> other;
+    };
+
+    StatelessSlabPerThreadAllocator() {
+    }
+
+    StatelessSlabPerThreadAllocator(const StatelessSlabPerThreadAllocator<T>& other) throw() {
+        assert(!other.inUse());
+    }
+
+    template<typename U> StatelessSlabPerThreadAllocator(const StatelessSlabPerThreadAllocator<U>& other) throw() {
+        assert(!other.inUse());
+    }
+
+    template<typename U> StatelessSlabPerThreadAllocator(StatelessSlabPerThreadAllocator<U>&& other) throw() {
+        assert(!other.inUse());
+    }
+
+    void operator=(const StatelessSlabPerThreadAllocator<T>& other) {
+        assert(!other.inUse());
+    }
+
+    void operator=(StatelessSlabPerThreadAllocator<T>&& other) {
+        assert(!other.inUse());
+    }
+
+    void destroy(pointer p) {
+        allocator.destroy(p);
+    }
+
+    void deallocate(pointer p, size_type n) {
+        allocator.deallocate(p, n);
+    }
+
+    pointer allocate(size_type n, const void* hint =0 ) {
+        allocator.allocate(n, hint);
+    }
+
+    bool inUse() const {
+        return allocator.inUse();
+    }
+};
+
+template<typename T>
+SlabPerThreadAllocator<T> StatelessSlabPerThreadAllocator<T>::allocator;

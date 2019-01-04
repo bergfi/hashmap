@@ -1,11 +1,20 @@
 #include <hre/config.h>
 
+#include "httestconfig.h"
+
 #include <atomic>
 #include <thread>
 #include <vector>
 extern "C" {
 #include <mc-lib/hashtable.h>
 }
+
+#define HM_USE_VENDOR 1
+#define HM_USE_VENDOR_LIBCDS 1
+#define HM_USE_VENDOR_FOLLY 1
+#define HM_USE_VENDOR_TBB 1
+#define HM_USE_OWN 1
+#define HM_USE_DTREE 1
 
 #include <cassert>
 #include <cstdarg>
@@ -55,6 +64,7 @@ extern "C" {
 #include "mmapmmap.h"
 #include "insituUB.h"
 #include "insituUBquad.h"
+#include "insituQuad.h"
 #include "insituRevCasUB.h"
 #include "insituRevCasUBquad.h"
 #include "insituDCASUB.h"
@@ -62,12 +72,18 @@ extern "C" {
 #include "insitu32.h"
 #include "insituQ32.h"
 #include "openaddr.h"
+#include "ht.h"
+#include "PTAHash.h"
 
 #include "test_ints.h"
 #include "test_ints2.h"
+#include "test_ints3.h"
 #include "test_strings.h"
 #include "test_words.h"
 #include "test_vectors.h"
+
+#include "tests/common.h"
+#include "common/timer.h"
 
 #include "wrappers.h"
 #include "mystring.h"
@@ -79,8 +95,6 @@ using namespace libfrugi;
 
 #define __STRINGIFY(x) #x
 #define STRINGIFY(x) __STRINGIFY(x)
-
-#define HAVE_DIVINE
 
 #ifdef HAVE_DIVINE
 #pragma GCC diagnostic push
@@ -103,30 +117,6 @@ extern "C" {
 #endif
 // END CHLT
 
-class Timer {
-private:
-#if WIN32
-    LARGE_INTEGER freq;
-    LARGE_INTEGER start;
-#else
-    timespec start;
-#endif
-public:
-    Timer() {
-        reset();
-    }
-    void reset() {
-        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    }
-    double getElapsedSeconds() {
-        timespec now;
-        clock_gettime(CLOCK_MONOTONIC_RAW, &now);
-        return (double)(now.tv_sec -start.tv_sec )
-             + (double)(now.tv_nsec-start.tv_nsec)*0.000000001;
-    }
-};
-
-
 int      size_t_cmp   (void * a, void * b, void * ctx) {
     return (size_t)b-(size_t)a;
 }
@@ -142,7 +132,7 @@ void     size_t_free  (void * a) {
 // ----------
 
 template<typename OUT, typename CONTAINER>
-void printDensitygraph(OUT& out, CONTAINER& elements) {
+void printGraph(OUT& out, CONTAINER& elements, std::string const& colorCode) {
 
     unsigned char level[] = {' ', '_', '-', '+', '=', '*', '#'};
 
@@ -151,7 +141,7 @@ void printDensitygraph(OUT& out, CONTAINER& elements) {
         maxElements = std::max(maxElements, element);
     }
 
-    out << "\033[1;37;44m";
+    out << colorCode;
     for(size_t i = 0; i < elements.size(); ++i) {
         if(elements[i]==0) {
             out << char(level[0]);
@@ -167,7 +157,12 @@ void printDensitygraph(OUT& out, CONTAINER& elements) {
         }
     }
     out << "\033[0m";
-    out << " " << "\033[1;37;44m" "#"<< "\033[0m" << " = " << maxElements;
+    out << " " << colorCode << "#\033[0m = " << maxElements;
+}
+
+template<typename OUT, typename CONTAINER>
+void printDensitygraph(OUT&& out, CONTAINER&& elements) {
+    printGraph(std::forward<OUT>(out), std::forward<CONTAINER>(elements), "\033[1;37;44m");
 }
 
 // ----------
@@ -322,6 +317,30 @@ public:
 
 private:
     chaintableints::HashTable* ht;
+};
+
+template<typename K, typename V>
+class ImplPTAHash: public ImplMyAPI<PTAHash::HashTable, K, V> {
+public:
+
+    ImplPTAHash(): ImplMyAPI<PTAHash::HashTable, K, V>("PTAHash") {}
+
+    __attribute__((always_inline))
+    void statsString(std::ostream& out, size_t bars) {
+        typename PTAHash::HashTable<K,V>::stats stats;
+        this->ht->getStats(stats);
+        out << "size: " << stats.size
+            << ", buckets: " << stats.usedBuckets
+            << ", cols: " << stats.collisions
+            << ", avg chn: " << stats.avgChainLength
+            << ", lngst chn: " << stats.longestChain
+            ;
+        out << std::endl;
+        std::vector<size_t> elements;
+        elements.reserve(bars);
+        this->ht->getDensityStats(bars, elements);
+        printDensitygraph(out, elements);
+    }
 };
 
 template<typename K, typename V>
@@ -715,6 +734,30 @@ public:
 };
 
 template<typename K, typename V>
+class ImplMmapQuadCUV0: public ImplMyAPI<mmapquadtableCUV0::HashTable, K, V> {
+public:
+
+    ImplMmapQuadCUV0(): ImplMyAPI<mmapquadtableCUV0::HashTable, K, V>("MmapQCUV0") {}
+
+    __attribute__((always_inline))
+    void statsString(std::ostream& out, size_t bars) {
+        typename mmapquadtableCUV0::HashTable<K,V>::stats stats;
+        this->ht->getStats(stats);
+        out << "size: " << stats.size
+            << ", buckets: " << stats.usedBuckets
+            << ", cols: " << stats.collisions
+            << ", avg b. size: " << stats.avgBucketSize
+            << ", bgst bucket: " << stats.biggestBucket
+            ;
+        out << std::endl;
+        std::vector<size_t> elements;
+        elements.reserve(bars);
+        this->ht->getDensityStats(bars, elements);
+        printDensitygraph(out, elements);
+    }
+};
+
+template<typename K, typename V>
 class ImplOpenAddr: public ImplMyAPI2<openaddr::HashTable<K, V, MurmurHasher>> {
 public:
 
@@ -723,6 +766,30 @@ public:
     __attribute__((always_inline))
     void statsString(std::ostream& out, size_t bars) {
         typename openaddr::HashTable<K,V, MurmurHasher>::stats stats;
+        this->ht->getStats(stats);
+        out << "size: " << stats.size
+            << ", buckets: " << stats.usedBuckets
+            << ", cols: " << stats.collisions
+            << ", avg b. size: " << stats.avgBucketSize
+            << ", bgst bucket: " << stats.biggestBucket
+            ;
+        out << std::endl;
+        std::vector<size_t> elements;
+        elements.reserve(bars);
+        this->ht->getDensityStats(bars, elements);
+        printDensitygraph(out, elements);
+    }
+};
+
+template<typename K, typename V>
+class ImplGenHT: public ImplMyAPI2<genht::HashTable<K, V, MurmurHasher>> {
+public:
+
+    ImplGenHT(): ImplMyAPI2<genht::HashTable<K, V, MurmurHasher>>("GenHT") {}
+
+    __attribute__((always_inline))
+    void statsString(std::ostream& out, size_t bars) {
+        typename genht::HashTable<K,V, MurmurHasher>::stats stats;
         this->ht->getStats(stats);
         out << "size: " << stats.size
             << ", buckets: " << stats.usedBuckets
@@ -1395,7 +1462,7 @@ template<typename K, typename V>
 class ImplInsituU: public ImplMyAPI<insituUB::HashTable, K, V> {
 public:
 
-    ImplInsituU(): ImplMyAPI<insituUB::HashTable, K, V>("InsituU") {}
+    ImplInsituU(): ImplMyAPI<insituUB::HashTable, K, V>("InsituUF") {}
 
     __attribute__((always_inline))
     void statsString(std::ostream& out, size_t bars) {
@@ -1419,11 +1486,35 @@ template<typename K, typename V>
 class ImplInsituUBquad: public ImplMyAPI<insituUBquad::HashTable, K, V> {
 public:
 
-    ImplInsituUBquad(): ImplMyAPI<insituUBquad::HashTable, K, V>("InsituUBquad") {}
+    ImplInsituUBquad(): ImplMyAPI<insituUBquad::HashTable, K, V>("InsituQUF") {}
 
     __attribute__((always_inline))
     void statsString(std::ostream& out, size_t bars) {
         typename insituUBquad::HashTable<K,V>::stats stats;
+        this->ht->getStats(stats);
+        out << "size: " << stats.size
+            << ", buckets: " << stats.usedBuckets
+            << ", cols: " << stats.collisions
+            << ", avg b. size: " << stats.avgBucketSize
+            << ", bgst bucket: " << stats.biggestBucket
+            ;
+        out << std::endl;
+        std::vector<size_t> elements;
+        elements.reserve(bars);
+        this->ht->getDensityStats(bars, elements);
+        printDensitygraph(out, elements);
+    }
+};
+
+template<typename K, typename V>
+class ImplInsituQuad: public ImplMyAPI<insituQuad::HashTable, K, V> {
+public:
+
+    ImplInsituQuad(): ImplMyAPI<insituQuad::HashTable, K, V>("InsituQ") {}
+
+    __attribute__((always_inline))
+    void statsString(std::ostream& out, size_t bars) {
+        typename insituQuad::HashTable<K,V>::stats stats;
         this->ht->getStats(stats);
         out << "size: " << stats.size
             << ", buckets: " << stats.usedBuckets
@@ -1583,811 +1674,1062 @@ public:
     }
 };
 
-template<typename TEST, typename IMPL>
-struct thread_data {
-    TEST* test;
-    IMPL* impl;
-    size_t tid;
-    size_t inserts;
-    double result_time;
-    volatile int* phase;
-    std::atomic<size_t>* tcount;
-};
-
-typedef void*(*pfunc)(void*);
-
-struct cpuset {
-
-    static cpuset createForNUMACPU(size_t cpu) {
-        size_t numCPU = sysconf( _SC_NPROCESSORS_ONLN );
-        cpu_set_t* _mask = CPU_ALLOC(numCPU);
-        size_t _size = CPU_ALLOC_SIZE(numCPU);
-        CPU_ZERO_S(_size, _mask);
-        for(size_t t = cpu; t < numCPU; t+=4) {
-            CPU_SET_S(t, _size, _mask);
-        }
-        return cpuset(_size, _mask);
-    }
-
-    static cpuset createForCPU(size_t cpu) {
-        size_t numCPU = sysconf( _SC_NPROCESSORS_ONLN );
-        cpu_set_t* _mask = CPU_ALLOC(numCPU);
-        size_t _size = CPU_ALLOC_SIZE(numCPU);
-        CPU_ZERO_S(_size, _mask);
-        CPU_SET_S(cpu, _size, _mask);
-        return cpuset(_size, _mask);
-    }
-
-    cpuset(): _size(0), _mask(nullptr) {}
-    cpuset(size_t size, cpu_set_t* mask): _size(size), _mask(mask) {}
-
-//    ~cpuset() {
-//        if(_mask) {
-//            CPU_FREE(_mask);
-//        }
-//    }
-
-    size_t _size;
-    cpu_set_t* _mask;
-};
-
-
-template<typename TEST, typename IMPL>
-void* insertData(thread_data<TEST, IMPL>* data) {
-    TEST& test = *data->test;
-    IMPL& impl = *data->impl;
-    size_t& tid = data->tid;
-
-//    Timer t;
-    for(size_t i=data->inserts; i--;) {
-        auto&& k = test.key(tid, i);
-        auto v = test.value(tid, i, k);
-        impl.insert(k, v);
-    }
-//    data->result_time = t.getElapsedSeconds();
-    return nullptr;
-}
-
-template<typename TEST, typename IMPL>
-void* verifyData(thread_data<TEST, IMPL>* data) {
-    TEST& test = *data->test;
-    IMPL& impl = *data->impl;
-    size_t& tid = data->tid;
-    size_t wrong = data->inserts;
-
-//    Timer t;
-    for(size_t i=data->inserts; i--;) {
-        auto&& k = test.key(tid, i);
-        typename IMPL::value_type const&& v_correct = test.value(tid, i, k);
-        typename IMPL::value_type v = {0};
-        bool exists = impl.get(k, v);
-        if(!exists || v != v_correct) {
-            wrong = (wrong != data->inserts) ? wrong : i;
-        }
-    }
-//    data->result_time = t.getElapsedSeconds();
-    return (void*)wrong;
-}
-
-template<typename TEST, typename IMPL>
-void* insertThread(thread_data<TEST, IMPL>* data) {
-    IMPL& impl = *data->impl;
-    size_t tid = data->tid;
-    if constexpr(has_thread_init_method<IMPL>::value) {
-        impl.thread_init(tid);
-    }
-    (*data->tcount)--;
-    while(*data->phase < 1);
-    return insertData(data);
-}
-
-template<typename TEST, typename IMPL>
-void* verifyThread(thread_data<TEST, IMPL>* data) {
-    IMPL& impl = *data->impl;
-    size_t tid = data->tid;
-    if constexpr(has_thread_init_method<IMPL>::value) {
-        impl.thread_init(tid);
-    }
-    (*data->tcount)--;
-    while(*data->phase < 1);
-    return verifyData(data);
-}
-
-template<typename TEST, typename IMPL>
-void setupThreadData(thread_data<TEST, IMPL>& td, TEST* test, IMPL* impl, size_t tid, size_t inserts, int* phase, std::atomic<size_t>* tcount) {
-    td.test = test;
-    td.impl = impl;
-    td.tid = tid;
-    td.inserts = inserts;
-    td.result_time = 0.0;
-    td.phase = phase;
-    td.tcount = tcount;
-}
-
 //std::atomic<int> my_string::total_copies;
 //std::atomic<int> my_string::total_moves;
-
-template< template <typename> class TEST, typename IMPL>
-int httestGen(TEST<IMPL>& test, IMPL& impl) {
-
-//    my_string::total_copies = 0;
-//    my_string::total_moves = 0;
-
-    Settings& settings = Settings::global();
-
-    size_t bucketScale = settings["buckets_scale"].asUnsignedValue();
-    size_t threads = settings["threads"].asUnsignedValue();
-    size_t inserts = settings["inserts"].asUnsignedValue();
-    int phase = 0;
-    std::atomic<size_t> tcount(threads);
-
-    double dr = settings["duplicateratio"].as<double>();
-    double cr = settings["collisionratio"].as<double>();
-
-    if constexpr(!has_thread_init_method<IMPL>::value) {
-        inserts *= threads;
-        threads = 1;
-    }
-
-    Timer t;
-
-    test.setup(bucketScale, threads, inserts, dr, cr);
-
-    pthread_t workers[threads];
-    pthread_attr_t attributes[threads];
-    thread_data<TEST<IMPL>, IMPL> tdata[threads];
-
-    cpuset set[192];
-    for(int t = 0; t < 192; ++t) {
-        set[t] = cpuset::createForCPU(t);
-    }
-
-    // Setup
-    phase = 0;
-    t.reset();
-    impl.init(bucketScale);
-
-    for(size_t tid=threads; tid--;) {
-        setupThreadData(tdata[tid], &test, &impl, tid, inserts, &phase, &tcount);
-        pthread_attr_init(&attributes[tid]);
-        pthread_attr_setaffinity_np(&attributes[tid], set[tid]._size, set[tid]._mask);
-        pthread_create(&workers[tid], &attributes[tid], (pfunc)insertThread<TEST<IMPL>, IMPL>, (void*)&tdata[tid]);
-    }
-    while(tcount > 0);
-    auto elapsed_setup = t.getElapsedSeconds();
-
-    // Insertion
-    phase = 1;
-    std::atomic_thread_fence(std::memory_order_seq_cst);
-    t.reset();
-
-    for(size_t tid=threads; tid--;) {
-        size_t result = inserts;
-        pthread_join(workers[tid], nullptr);
-        pthread_attr_destroy(&attributes[tid]);
-    }
-
-    auto elapsed_insert = t.getElapsedSeconds();
-    phase = 0;
-
-    // Verify
-    bool ok = true;
-    typename TEST<IMPL>::key_type wrongKey;
-    typename TEST<IMPL>::value_type expectedValue;
-    typename IMPL::value_type wrongValue;
-    bool didNotExist = false;
-
-//    if(threads > 1) {
-        for(size_t tid=threads; tid--;) {
-            pthread_attr_init(&attributes[tid]);
-            pthread_attr_setaffinity_np(&attributes[tid], set[tid]._size, set[tid]._mask);
-            pthread_create(&workers[tid], &attributes[tid], (pfunc)verifyThread<TEST<IMPL>, IMPL>, (void*)&tdata[tid]);
-        }
-
-        phase = 1;
-        std::atomic_thread_fence(std::memory_order_seq_cst);
-        t.reset();
-
-        for(size_t tid=threads; tid--;) {
-            size_t result = inserts;
-            pthread_join(workers[tid], (void**)&result);
-            pthread_attr_destroy(&attributes[tid]);
-            if(result != inserts && ok) {
-                wrongKey = test.key(tid, (size_t)result);
-                wrongValue = 0;
-                expectedValue = test.value(tid, (size_t)result, wrongKey);
-                didNotExist = !impl.get(wrongKey, wrongValue);
-                ok = false;
-            }
-        }
-//    } else {
-//        size_t result = (intptr_t)checkThread<TEST<IMPL>, IMPL>(&tdata[0]);
-//        if(result != inserts) {
-//            wrongKey = test.key(0, (size_t)result);
-//            expectedValue = test.value(0, (size_t)result, wrongKey);
-//            didNotExist = !impl.get(wrongKey, wrongValue);
-//            ok = false;
-//        }
-//    }
-    auto elapsed_verify = t.getElapsedSeconds();
-    phase = 0;
-
-    // Stats
-    std::stringstream ss;
-    if(ok) {
-        ss << " ok, ";
-    } else {
-        ss << " wrong(key" << wrongKey << "), value=";
-        if(didNotExist) {
-            ss << "<no value>";
-        } else {
-            ss << wrongValue;
-        }
-        ss << ", expected=" << expectedValue << ", hash=" << std::hash<decltype(wrongKey)>{}(wrongKey) << " ";
-    }
-    if(settings["stats"].isOn()) {
-        impl.statsString(ss, settings["bars"].asUnsignedValue());
-    }
-
-    // Cleanup
-    t.reset();
-    impl.cleanup();
-    auto elapsed_cleanup = t.getElapsedSeconds();
-
-    // Print
-    auto elapsed_total = elapsed_setup + elapsed_insert + elapsed_cleanup + elapsed_verify;
-    fflush(stdout);
-    fflush(stderr);
-    std::cerr << std::fixed << std::setw( 25 ) << impl.name()
-              << std::fixed << std::setw(  4 ) << settings["buckets_scale"].asString()
-              << std::fixed << std::setw(  4 ) << settings["page_size_scale"].asString()
-              << std::fixed << std::setw(  4 ) << threads
-              << std::fixed << std::setw(  9 ) << inserts
-              << std::fixed << std::setw(  7 ) << std::setprecision( 2 ) << elapsed_setup
-              << std::fixed << std::setw(  7 ) << std::setprecision( 2 ) << elapsed_insert
-              << std::fixed << std::setw(  8 ) << std::setprecision( 2 ) << "0.00"
-              << std::fixed << std::setw(  7 ) << std::setprecision( 2 ) << elapsed_verify
-              << std::fixed << std::setw(  8 ) << std::setprecision( 2 ) << "0.00"
-              << std::fixed << std::setw(  7 ) << std::setprecision( 2 ) << elapsed_cleanup
-              << std::fixed << std::setw(  7 ) << std::setprecision( 2 ) << elapsed_total
-              << ss.str()
-              << std::endl;
-              ;
-
-//    std::cout << "total copies: " << my_string::total_copies << ", total moves: " << my_string::total_moves << std::endl;
-    fflush(stdout);
-    fflush(stderr);
-
-    return 0;
-
-}
 
 void runTest(std::string const& htName) {
 //    typedef boost::mpl::vector<ImplChain, ImplCLHT, ImplCpp, ImplDivineHT, ImplMmap<size_t,size_t>, ImplCacheChain> vec;
 //    boost::mpl::for_each<vec>(value_printer{htName});
-    if(htName == "ChainInts:i") {
+    if(false) {
+#if HM_USE_OWN
+    } else if(htName == "ChainInts:i") {
         ImplChainInts impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Chain:i") {
         ImplChain<size_t,size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainSlab:i") {
         ImplChainSlab<size_t,size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainU:i") {
         ImplChainGenericUB<size_t,size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainUV:i") {
         ImplChainGenericUBVK<size_t,size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainV:i") {
         ImplChainGenericV<size_t,size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainC7:i") {
+        ImplCacheChain<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainC0:i") {
+        ImplCacheChain2<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "CChain2C:i") {
+        ImplCacheChain2Config<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainC:i") {
+        ImplCacheChain3<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "CChain3AC:i") {
+        ImplCacheChain3AC<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainCV:i") {
+        ImplCacheChain3VK<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainCU:i") {
+        ImplCacheChain3UB<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainCUV:i") {
+        ImplCacheChain3UBVK<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChunkHT:i") {
+        ImplChunkHT impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Mmap:i") {
+        ImplMmap<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapU:i") {
+        ImplMmapU<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapC:i") {
+        ImplMmapCache<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQ:i") {
+        ImplMmapQuad<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQC:i") {
+        ImplMmapQuadC<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQCU:i") {
+        ImplMmapQuadCU<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQCUV:i") {
+        ImplMmapQuadCUV<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQCUV0:i") {
+        ImplMmapQuadCUV0<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapMmap:i") {
+        ImplMmapMmap<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituUF:i") {
+        ImplInsituU<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQUF:i") {
+        ImplInsituUBquad<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQ:i") {
+        ImplInsituQuad<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituRevCasU:i") {
+        ImplInsituRevCasUB<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituRevCasQU:i") {
+        ImplInsituRevCasUBquad<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituDU:i") {
+        ImplInsituDCASUB<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQDU:i") {
+        ImplInsituDCASUBquad<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Insitu32:i") {
+        ImplInsitu32<__uint32_t, __uint32_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQ32:i") {
+        ImplInsituQ32<__uint32_t, __uint32_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_VENDOR
+    } else if(htName == "dbsll:i") {
+        ImplDBSLL<size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "dbsllold:i") {
+        ImplDBSLLOld<size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
+    } else if(htName == "TBBF:i") {
+        ImplTBBHashMapDefaultAllocator<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "TBBF.ma:i") {
+        ImplTBBHashMapMyAllocator<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
 #ifdef HAVE_CLHT
     } else if(htName == "CLHT:i") {
         ImplCLHT impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 #endif
-    } else if(htName == "ChainC7:i") {
-        ImplCacheChain<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChainC0:i") {
-        ImplCacheChain2<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "CChain2C:i") {
-        ImplCacheChain2Config<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChainC:i") {
-        ImplCacheChain3<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "CChain3AC:i") {
-        ImplCacheChain3AC<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChainCV:i") {
-        ImplCacheChain3VK<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChainCU:i") {
-        ImplCacheChain3UB<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChainCUV:i") {
-        ImplCacheChain3UBVK<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChunkHT:i") {
-        ImplChunkHT impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "dbsll:i") {
-        ImplDBSLL<size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "Mmap:i") {
-        ImplMmap<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapU:i") {
-        ImplMmapU<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapC:i") {
-        ImplMmapCache<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapQ:i") {
-        ImplMmapQuad<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapQC:i") {
-        ImplMmapQuadC<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapQCU:i") {
-        ImplMmapQuadCU<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapQCUV:i") {
-        ImplMmapQuadCUV<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapMmap:i") {
-        ImplMmapMmap<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "TBB:i") {
-        ImplTBBHashMapDefaultAllocator<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
 #ifdef HAVE_DIVINE
     } else if(htName == "DIVINE:i") {
         ImplDivineHT<size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 #endif
     } else if(htName == "Junction.Crude:i") {
         ImplJunctionCrude<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Junction.Crude.Murmur:i") {
+        ImplJunctionCrudeMurmur<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Junction.Linear:i") {
         ImplJunctionLinear<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Junction.LeapFrog:i") {
         ImplJunctionLeapFrog<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Junction.Grampa:i") {
         ImplJunctionGrampa<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Sylvan:i") {
         ImplSylvan<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "bytell:i") {
         ImplBytell<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "bytell_s:i") {
         ImplBytell_s<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituU:i") {
-        ImplInsituU<size_t, size_t> impl;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gsparse:i") {
+        ImplGoogleSparseHash<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituQU:i") {
-        ImplInsituUBquad<size_t, size_t> impl;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gsparse_s:i") {
+        ImplGoogleSparseHash_s<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituRevCasU:i") {
-        ImplInsituRevCasUB<size_t, size_t> impl;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gdense:i") {
+        ImplGoogleDenseHash<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituRevCasQU:i") {
-        ImplInsituRevCasUBquad<size_t, size_t> impl;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gdense_s:i") {
+        ImplGoogleDenseHash_s<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituDU:i") {
-        ImplInsituDCASUB<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituQDU:i") {
-        ImplInsituDCASUBquad<size_t, size_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "Insitu32:i") {
-        ImplInsitu32<__uint32_t, __uint32_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituQ32:i") {
-        ImplInsituQ32<__uint32_t, __uint32_t> impl;
-        TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
     } else if(htName == "libcuckoo.sa:i") {
         ImplLibCuckooSA<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+    } else if(htName == "libcuckoo.ma:i") {
+        ImplLibCuckooMA<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "folklore:i") {
         ImplGrowtFolklore<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "uaGrow:i") {
         ImplGrowtUAGrow<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "usGrow:i") {
         ImplGrowtUSGrow<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "usnGrow:i") {
         ImplGrowtUSNGrow<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "paGrow:i") {
         ImplGrowtPAGrow<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "psGrow:i") {
         ImplGrowtPSGrow<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "psnGrow:i") {
         ImplGrowtPSNGrow<size_t, size_t> impl;
         TestInts::Test<decltype(impl)> test;
-        httestGen(test, impl);
-
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_LIBCDS
+    } else if(htName == "michaelML:i") {
+        ImplCDSMichaelMLNOGC<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "michaelMLMA:i") {
+        ImplCDSMichaelMLNOGCMA<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
+    } else if(htName == "michaelMLSA:i") {
+        ImplCDSMichaelMLNOGCSA<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+    } else if(htName == "michaelMLDHP:i") {
+        ImplCDSMichaelMLDHP<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "michaelLL:i") {
+//        ImplCDSMichaelLLNOGC<size_t, size_t> impl;
+//        TestInts::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "skiplist:i") {
+        ImplCDSSkipList<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "splitlist:i") {
+        ImplCDSSplitList<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "splitlistMA:i") {
+        ImplCDSSplitListMA<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_VENDOR_FOLLY
+    } else if(htName == "folly:i") {
+        ImplFolly<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "follyQ:i") {
+        ImplFollyQ<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "follyQMA:i") {
+        ImplFollyQMA<size_t, size_t> impl;
+        TestInts::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#endif
+#if HM_USE_OWN
     } else if(htName == "ChainInts:j") {
         ImplChainInts impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Chain:j") {
         ImplChain<size_t,size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainSlab:j") {
         ImplChainSlab<size_t,size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainU:j") {
         ImplChainGenericUB<size_t,size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+
     } else if(htName == "ChainUV:j") {
         ImplChainGenericUBVK<size_t,size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainV:j") {
         ImplChainGenericV<size_t,size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainC7:j") {
+        ImplCacheChain<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainC0:j") {
+        ImplCacheChain2<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "CChain2C:j") {
+        ImplCacheChain2Config<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainC:j") {
+        ImplCacheChain3<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "CChain3AC:j") {
+        ImplCacheChain3AC<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainCV:j") {
+        ImplCacheChain3VK<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainCU:j") {
+        ImplCacheChain3UB<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainCUV:j") {
+        ImplCacheChain3UBVK<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChunkHT:j") {
+        ImplChunkHT impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Mmap:j") {
+        ImplMmap<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapU:j") {
+        ImplMmapU<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapC:j") {
+        ImplMmapCache<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQ:j") {
+        ImplMmapQuad<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQC:j") {
+        ImplMmapQuadC<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQCU:j") {
+        ImplMmapQuadCU<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQCUV:j") {
+        ImplMmapQuadCUV<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQCUV0:j") {
+        ImplMmapQuadCUV0<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapMmap:j") {
+        ImplMmapMmap<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituU:j") {
+        ImplInsituU<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQU:j") {
+        ImplInsituUBquad<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituRevCasU:j") {
+        ImplInsituRevCasUB<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituRevCasQU:j") {
+        ImplInsituRevCasUBquad<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituDU:j") {
+        ImplInsituDCASUB<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQDU:j") {
+        ImplInsituDCASUBquad<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Insitu32:j") {
+        ImplInsitu32<__uint32_t, __uint32_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQ32:j") {
+        ImplInsituQ32<__uint32_t, __uint32_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituUF:j") {
+        ImplInsituU<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQUF:j") {
+        ImplInsituUBquad<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "PTAHash:j") {
+        ImplPTAHash<size_t,size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_VENDOR
+    } else if(htName == "dbsll:j") {
+        ImplDBSLL<size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "dbsllold:j") {
+        ImplDBSLLOld<size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
+    } else if(htName == "TBBF:j") {
+        ImplTBBHashMapDefaultAllocator<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "TBBF.ma:j") {
+        ImplTBBHashMapMyAllocator<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
 #ifdef HAVE_CLHT
     } else if(htName == "CLHT:j") {
         ImplCLHT impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 #endif
-    } else if(htName == "ChainC7:j") {
-        ImplCacheChain<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChainC0:j") {
-        ImplCacheChain2<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "CChain2C:j") {
-        ImplCacheChain2Config<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChainC:j") {
-        ImplCacheChain3<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "CChain3AC:j") {
-        ImplCacheChain3AC<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChainCV:j") {
-        ImplCacheChain3VK<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChainCU:j") {
-        ImplCacheChain3UB<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChainCUV:j") {
-        ImplCacheChain3UBVK<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "ChunkHT:j") {
-        ImplChunkHT impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "dbsll:j") {
-        ImplDBSLL<size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "Mmap:j") {
-        ImplMmap<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapU:j") {
-        ImplMmapU<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapC:j") {
-        ImplMmapCache<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapQ:j") {
-        ImplMmapQuad<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapQC:j") {
-        ImplMmapQuadC<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapQCU:j") {
-        ImplMmapQuadCU<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapQCUV:j") {
-        ImplMmapQuadCUV<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "MmapMmap:j") {
-        ImplMmapMmap<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "TBB:j") {
-        ImplTBBHashMapDefaultAllocator<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
 #ifdef HAVE_DIVINE
     } else if(htName == "DIVINE:j") {
         ImplDivineHT<size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 #endif
     } else if(htName == "Junction.Crude:j") {
         ImplJunctionCrude<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Junction.Crude.Murmur:j") {
+        ImplJunctionCrudeMurmur<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Junction.Linear:j") {
         ImplJunctionLinear<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Junction.LeapFrog:j") {
         ImplJunctionLeapFrog<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Junction.Grampa:j") {
         ImplJunctionGrampa<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Sylvan:j") {
         ImplSylvan<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "bytell:j") {
         ImplBytell<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gsparse:j") {
+        ImplGoogleSparseHash<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gsparse_s:j") {
+        ImplGoogleSparseHash_s<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gdense:j") {
+        ImplGoogleDenseHash<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gdense_s:j") {
+        ImplGoogleDenseHash_s<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "bytell_s:j") {
         ImplBytell_s<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituU:j") {
-        ImplInsituU<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituQU:j") {
-        ImplInsituUBquad<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituRevCasU:j") {
-        ImplInsituRevCasUB<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituRevCasQU:j") {
-        ImplInsituRevCasUBquad<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituDU:j") {
-        ImplInsituDCASUB<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituQDU:j") {
-        ImplInsituDCASUBquad<size_t, size_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "Insitu32:j") {
-        ImplInsitu32<__uint32_t, __uint32_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "InsituQ32:j") {
-        ImplInsituQ32<__uint32_t, __uint32_t> impl;
-        TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
     } else if(htName == "libcuckoo.sa:j") {
         ImplLibCuckooSA<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+    } else if(htName == "libcuckoo.ma:j") {
+        ImplLibCuckooMA<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "folklore:j") {
         ImplGrowtFolklore<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "uaGrow:j") {
         ImplGrowtUAGrow<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "usGrow:j") {
         ImplGrowtUSGrow<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "usnGrow:j") {
         ImplGrowtUSNGrow<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "paGrow:j") {
         ImplGrowtPAGrow<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "psGrow:j") {
         ImplGrowtPSGrow<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "psnGrow:j") {
         ImplGrowtPSNGrow<size_t, size_t> impl;
         TestInts2::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_LIBCDS
+    } else if(htName == "michaelML:j") {
+        ImplCDSMichaelMLNOGC<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "michaelMLMA:j") {
+        ImplCDSMichaelMLNOGCMA<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
+    } else if(htName == "michaelMLSA:j") {
+        ImplCDSMichaelMLNOGCSA<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+    } else if(htName == "michaelMLDHP:j") {
+        ImplCDSMichaelMLDHP<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "michaelLL:i") {
+//        ImplCDSMichaelLLNOGC<size_t, size_t> impl;
+//        TestInts::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "skiplist:j") {
+        ImplCDSSkipList<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "splitlist:j") {
+        ImplCDSSplitList<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "splitlistMA:j") {
+        ImplCDSSplitListMA<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_VENDOR_FOLLY
+    } else if(htName == "folly:j") {
+        ImplFolly<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "follyQ:j") {
+        ImplFollyQ<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "follyQMA:j") {
+        ImplFollyQMA<size_t, size_t> impl;
+        TestInts2::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#endif
+#if HM_USE_OWN
+    } else if(htName == "ChainInts:k") {
+        ImplChainInts impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Chain:k") {
+        ImplChain<size_t,size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainSlab:k") {
+        ImplChainSlab<size_t,size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainU:k") {
+        ImplChainGenericUB<size_t,size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 
+    } else if(htName == "ChainUV:k") {
+        ImplChainGenericUBVK<size_t,size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainV:k") {
+        ImplChainGenericV<size_t,size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainC7:k") {
+        ImplCacheChain<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainC0:k") {
+        ImplCacheChain2<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "CChain2C:k") {
+        ImplCacheChain2Config<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainC:k") {
+        ImplCacheChain3<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "CChain3AC:k") {
+        ImplCacheChain3AC<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainCV:k") {
+        ImplCacheChain3VK<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainCU:k") {
+        ImplCacheChain3UB<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChainCUV:k") {
+        ImplCacheChain3UBVK<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "ChunkHT:k") {
+        ImplChunkHT impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Mmap:k") {
+        ImplMmap<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapU:k") {
+        ImplMmapU<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapC:k") {
+        ImplMmapCache<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQ:k") {
+        ImplMmapQuad<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQC:k") {
+        ImplMmapQuadC<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQCU:k") {
+        ImplMmapQuadCU<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQCUV:k") {
+        ImplMmapQuadCUV<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapQCUV0:k") {
+        ImplMmapQuadCUV0<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "MmapMmap:k") {
+        ImplMmapMmap<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituU:k") {
+        ImplInsituU<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQU:k") {
+        ImplInsituUBquad<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituRevCasU:k") {
+        ImplInsituRevCasUB<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituRevCasQU:k") {
+        ImplInsituRevCasUBquad<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituDU:k") {
+        ImplInsituDCASUB<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQDU:k") {
+        ImplInsituDCASUBquad<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Insitu32:k") {
+        ImplInsitu32<__uint32_t, __uint32_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQ32:k") {
+        ImplInsituQ32<__uint32_t, __uint32_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituUF:k") {
+        ImplInsituU<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "InsituQUF:k") {
+        ImplInsituUBquad<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "PTAHash:k") {
+        ImplPTAHash<size_t,size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "OpenAddr:k") {
+        ImplOpenAddr<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_VENDOR
+    } else if(htName == "dbsll:k") {
+        ImplDBSLL<size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "dbsllold:k") {
+        ImplDBSLLOld<size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
+    } else if(htName == "TBBF:k") {
+        ImplTBBHashMapDefaultAllocator<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "TBBF.ma:k") {
+        ImplTBBHashMapMyAllocator<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#ifdef HAVE_CLHT
+    } else if(htName == "CLHT:k") {
+        ImplCLHT impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#ifdef HAVE_DIVINE
+    } else if(htName == "DIVINE:k") {
+        ImplDivineHT<size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+    } else if(htName == "Junction.Crude:k") {
+        ImplJunctionCrude<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Junction.Crude.Murmur:k") {
+        ImplJunctionCrudeMurmur<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Junction.Linear:k") {
+        ImplJunctionLinear<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Junction.LeapFrog:k") {
+        ImplJunctionLeapFrog<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Junction.Grampa:k") {
+        ImplJunctionGrampa<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "Sylvan:k") {
+        ImplSylvan<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "bytell:k") {
+        ImplBytell<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gsparse:k") {
+        ImplGoogleSparseHash<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gsparse_s:k") {
+        ImplGoogleSparseHash_s<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gdense:k") {
+        ImplGoogleDenseHash<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "gdense_s:k") {
+        ImplGoogleDenseHash_s<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "bytell_s:k") {
+        ImplBytell_s<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
+    } else if(htName == "libcuckoo.sa:k") {
+        ImplLibCuckooSA<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+    } else if(htName == "libcuckoo.ma:k") {
+        ImplLibCuckooMA<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "folklore:k") {
+        ImplGrowtFolklore<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "uaGrow:k") {
+        ImplGrowtUAGrow<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "usGrow:k") {
+        ImplGrowtUSGrow<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "usnGrow:k") {
+        ImplGrowtUSNGrow<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "paGrow:k") {
+        ImplGrowtPAGrow<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "psGrow:k") {
+        ImplGrowtPSGrow<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "psnGrow:k") {
+        ImplGrowtPSNGrow<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_LIBCDS
+    } else if(htName == "michaelML:k") {
+        ImplCDSMichaelMLNOGC<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "michaelMLMA:k") {
+        ImplCDSMichaelMLNOGCMA<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
+    } else if(htName == "michaelMLSA:k") {
+        ImplCDSMichaelMLNOGCSA<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+    } else if(htName == "michaelMLDHP:k") {
+        ImplCDSMichaelMLDHP<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "michaelLL:i") {
+//        ImplCDSMichaelLLNOGC<size_t, size_t> impl;
+//        TestInts::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "skiplist:k") {
+        ImplCDSSkipList<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "splitlist:k") {
+        ImplCDSSplitList<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "splitlistMA:k") {
+        ImplCDSSplitListMA<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_VENDOR_FOLLY
+    } else if(htName == "folly:k") {
+        ImplFolly<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "follyQ:k") {
+        ImplFollyQ<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "follyQMA:k") {
+        ImplFollyQMA<size_t, size_t> impl;
+        TestInts3::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#endif
+#if HM_USE_OWN
     } else if(htName == "Chain:s") {
         ImplChain<my_string,size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainSlab:s") {
         ImplChainSlab<my_string,size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainU:s") {
         ImplChainGenericUB<my_string,size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainUV:s") {
         ImplChainGenericUBVK<my_string,size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainV:s") {
         ImplChainGenericV<my_string,size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainC7:s") {
         ImplCacheChain<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainC0:s") {
         ImplCacheChain2<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "CChain2C:s") {
         ImplCacheChain2Config<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainC:s") {
         ImplCacheChain3<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "CChain3AC:s") {
         ImplCacheChain3AC<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainCV:s") {
         ImplCacheChain3VK<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainCU:s") {
         ImplCacheChain3UB<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainCUV:s") {
         ImplCacheChain3UBVK<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Mmap:s") {
         ImplMmap<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapU:s") {
         ImplMmapU<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapC:s") {
         ImplMmapCache<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQ:s") {
         ImplMmapQuad<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQC:s") {
         ImplMmapQuadC<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQCU:s") {
         ImplMmapQuadCU<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQCUV:s") {
         ImplMmapQuadCUV<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_VENDOR
     } else if(htName == "ChunkHT:s") {
         ImplChunkHTGeneric<my_string> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "TBB:s") {
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
+    } else if(htName == "TBBF:s") {
         ImplTBBHashMapDefaultAllocator<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
     } else if(htName == "bytell:s") {
         ImplBytell<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "bytell_s:s") {
         ImplBytell_s<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
     } else if(htName == "libcuckoo.sa:s") {
         ImplLibCuckooSA<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
 //    } else if(htName == "Junction.s") {
 //        ImplJunction<my_string, size_t, junction::ConcurrentMap_Leapfrog> impl;
 //        TestStrings::Test<decltype(impl)> test;
-//        httestGen(test, impl);
-
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_OWN
     } else if(htName == "Chain:w") {
         ImplChain<my_string,size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainSlab:w") {
         ImplChainSlab<my_string,size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 //        auto _words = WordData::getTestDataCache()[0]._words;
 //        auto _wordsTotal = WordData::getTestDataCache()[0]._wordsTotal;
 //        for(;_wordsTotal--;) {
@@ -2399,243 +2741,317 @@ void runTest(std::string const& htName) {
     } else if(htName == "ChainU:w") {
         ImplChainGenericUB<my_string,size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainUV:w") {
         ImplChainGenericUBVK<my_string,size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainV:w") {
         ImplChainGenericV<my_string,size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainC7:w") {
         ImplCacheChain<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainC0:w") {
         ImplCacheChain2<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "CChain2C:w") {
         ImplCacheChain2Config<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainC:w") {
         ImplCacheChain3<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "CChain3AC:w") {
         ImplCacheChain3AC<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainCV:w") {
         ImplCacheChain3VK<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainCU:w") {
         ImplCacheChain3UB<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainCUV:w") {
         ImplCacheChain3UBVK<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Mmap:w") {
         ImplMmap<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapU:w") {
         ImplMmapU<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapC:w") {
         ImplMmapCache<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQ:w") {
         ImplMmapQuad<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQC:w") {
         ImplMmapQuadC<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQCU:w") {
         ImplMmapQuadCU<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQCUV:w") {
         ImplMmapQuadCUV<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "TBB:w") {
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_VENDOR
+#if HM_USE_VENDOR_TBB
+    } else if(htName == "TBBF:w") {
         ImplTBBHashMapDefaultAllocator<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
     } else if(htName == "bytell:w") {
         ImplBytell<my_string, size_t> impl;
         TestWords1<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "bytell_s:w") {
         ImplBytell_s<my_string, size_t> impl;
         TestStrings::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
     } else if(htName == "libcuckoo.sa:w") {
         ImplLibCuckooSA<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
-
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#endif
+#if HM_USE_OWN
     } else if(htName == "Chain:v") {
         ImplChain<myvector,size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainSlab:v") {
         ImplChainSlab<myvector,size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainU:v") {
         ImplChainGenericUB<myvector,size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainUV:v") {
         ImplChainGenericUBVK<myvector,size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainV:v") {
         ImplChainGenericV<myvector,size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainC7:v") {
         ImplCacheChain<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainC0:v") {
         ImplCacheChain2<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "CChain2C:v") {
         ImplCacheChain2Config<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainC:v") {
         ImplCacheChain3<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "CChain3AC:v") {
         ImplCacheChain3AC<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainCV:v") {
         ImplCacheChain3VK<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainCU:v") {
         ImplCacheChain3UB<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "ChainCUV:v") {
         ImplCacheChain3UBVK<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 //    } else if(htName == "ChunkHT:v") {
 //        ImplChunkHT impl;
 //        TestVectors::Test<decltype(impl)> test;
-//        httestGen(test, impl);
-    } else if(htName == "dbsll:v") {
-        ImplDBSLL<myvector> impl;
-        TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "Mmap:v") {
         ImplMmap<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapU:v") {
         ImplMmapU<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapC:v") {
         ImplMmapCache<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQ:v") {
         ImplMmapQuad<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQC:v") {
         ImplMmapQuadC<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapQCU:v") {
         ImplMmapQuadCU<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
     } else if(htName == "MmapQCUV:v") {
         ImplMmapQuadCUV<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_OWN
     } else if(htName == "OpenAddr:v") {
         ImplOpenAddr<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "GenHT:v") {
+        ImplGenHT<myvector, size_t> impl;
+        TestVectors::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "MmapMmap:v") {
         ImplMmapMmap<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "TBB:v") {
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_VENDOR
+    } else if(htName == "dbsll:v") {
+        ImplDBSLL<myvector> impl;
+        TestVectors::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "dbsllold:v") {
+        ImplDBSLLOld<myvector> impl;
+        TestVectors::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#if HM_USE_VENDOR_TBB
+    } else if(htName == "TBBF:v") {
         ImplTBBHashMapDefaultAllocator<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "TBBu:v") {
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "TBBF.ma:v") {
+        ImplTBBHashMapMyAllocator<myvector, size_t> impl;
+        TestVectors::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "TBBFu:v") {
         ImplTBBUnorderedMapDefaultAllocator<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "TBB:sa:v") {
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "TBBF:sa:v") {
         ImplTBBHashMapScalableAllocator<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
-    } else if(htName == "TBBu:sa:v") {
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+    } else if(htName == "TBBFu:sa:v") {
         ImplTBBUnorderedMapScalableAllocator<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
 #ifdef HAVE_DIVINE
     } else if(htName == "DIVINE:v") {
         ImplDivineHT<myvector> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 #endif
+#if HM_USE_VENDOR_TBB
     } else if(htName == "libcuckoo.sa:v") {
         ImplLibCuckooSA<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+    } else if(htName == "libcuckoo.ma:v") {
+        ImplLibCuckooMA<myvector, size_t> impl;
+        TestVectors::Test<decltype(impl)> test;
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 //    } else if(htName == "Sylvan:v") {
 //        ImplSylvan<myvector, size_t> impl;
 //        TestVectors::Test<decltype(impl)> test;
-//        httestGen(test, impl);
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 //    } else if(htName == "Junction.Crude:v") {
 //        ImplJunctionCrude<myvector, size_t> impl;
 //        TestVectors::Test<decltype(impl)> test;
-//        httestGen(test, impl);
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 //    } else if(htName == "Junction.Linear:v") {
 //        ImplJunctionLinear<myvector, size_t> impl;
 //        TestVectors::Test<decltype(impl)> test;
-//        httestGen(test, impl);
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 //    } else if(htName == "Junction.LeapFrog:v") {
 //        ImplJunctionLeapFrog<myvector, size_t> impl;
 //        TestVectors::Test<decltype(impl)> test;
-//        httestGen(test, impl);
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 //    } else if(htName == "Junction.Grampa:v") {
 //        ImplJunctionGrampa<myvector, size_t> impl;
 //        TestVectors::Test<decltype(impl)> test;
-//        httestGen(test, impl);
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "bytell:v") {
         ImplBytell<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
     } else if(htName == "bytell_s:v") {
         ImplBytell_s<myvector, size_t> impl;
         TestVectors::Test<decltype(impl)> test;
-        httestGen(test, impl);
+        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "gsparse:v") {
+//        ImplGoogleSparseHash<size_t, size_t> impl;
+//        TestVectors::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "gsparse_s:v") {
+//        ImplGoogleSparseHash_s<size_t, size_t> impl;
+//        TestVectors::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "gdense:v") {
+//        ImplGoogleDenseHash<size_t, size_t> impl;
+//        TestVectors::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "gdense_s:v") {
+//        ImplGoogleDenseHash_s<size_t, size_t> impl;
+//        TestVectors::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
+#if HM_USE_DTREE
+//    } else if(htName == "dtree:v") {
+//        ImplDTree<myvector, size_t, HashSet> impl;
+//        TestVectors::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
 
+//    } else if(htName == "dtreel:v") {
+//        ImplDTree<myvector, size_t, HashSet<RehasherExit, Linear>> impl;
+//        TestVectors::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "dtreell:v") {
+//        ImplDTree<myvector, size_t, HashSet<RehasherExit, LinearLinear>> impl;
+//        TestVectors::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "dtreeql:v") {
+//        ImplDTree<myvector, size_t, HashSet<RehasherExit, QuadLinear>> impl;
+//        TestVectors::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "dtreeld8:v") {
+//        ImplDTree<myvector, size_t, HashSet<RehasherExit, LinearDiv8>> impl;
+//        TestVectors::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+//    } else if(htName == "dtreeld2:v") {
+//        ImplDTree<myvector, size_t, HashSet<RehasherExit, LinearDiv2>> impl;
+//        TestVectors::Test<decltype(impl)> test;
+//        SimpleTest<decltype(test), decltype(impl)>(test, impl).test();
+#endif
     } else if(!htName.empty()) {
         printf("Unknown hash map: %s\n", htName.c_str());
     } else {

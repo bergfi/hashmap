@@ -10,7 +10,7 @@ extern "C" {
 
 #include <hre/user.h>
 
-uint64_t MurmurHash64 (const void * key, int len, unsigned int seed) {
+uint64_t MurmurHash64 (const void * key, int len, uint64_t seed) {
     return MurmurHash64<>(key, len, seed);
 }
 

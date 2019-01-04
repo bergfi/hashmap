@@ -1,0 +1,4 @@
+#cmakedefine HAVE_CLHT @HAVE_CLHT@
+#cmakedefine HAVE_DIVINE @HAVE_DIVINE@
+#cmakedefine HAVE_LTSMIN @HAVE_LTSMIN@
+#cmakedefine HAVE_VTUNE @HAVE_VTUNE@

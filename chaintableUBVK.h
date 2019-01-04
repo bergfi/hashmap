@@ -58,7 +58,7 @@ public:
         _map = (decltype(_map))MMapper::mmapForMap(_buckets * sizeof(std::atomic<HashTableEntry<K,V>*>));
     }
 public:
-    size_t insert(K const& key, V const& value) {
+    V const& insert(K const& key, V const& value) {
 //        printf("key:   %zx\n", key);
         size_t h = hash(key);
         size_t h16l = hash16LeftFromHash(h);

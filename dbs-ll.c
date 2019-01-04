@@ -180,7 +180,7 @@ DBSLLfop_hash (const dbs_ll_t dbs, const int *v, dbs_ref_t *ret, hash64_t *hash,
         hash_memo = (hash_memo + (prime << (dbs->sat_bits+1))) & ~dbs->sat_mask;
     mem_hash_t          WAIT = hash_memo & WRITE_BIT_R;
     mem_hash_t          DONE = hash_memo | WRITE_BIT;
-    while (seed < dbs->threshold && !atomic_read(&dbs->full)) {
+    while (/*seed < dbs->threshold && ((changed for benchmark)) */ !atomic_read(&dbs->full)) {
         size_t              ref = hash_rehash & dbs->mask;
         size_t              line_end = (ref & CL_MASK) + CACHE_LINE_SIZE;
         for (size_t i = 0; i < CACHE_LINE_SIZE; i++) {

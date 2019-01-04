@@ -19,7 +19,7 @@ struct slab {
     slab* next;
 
     slab(slab* next): next(next) {
-        size_t bytesNeeded = sizeof(HTE) << 26;
+        size_t bytesNeeded = sizeof(HTE) << 30;
         size_t map_page_size = 18 << MAP_HUGE_SHIFT;
         entries = nextentry = (HTE*)mmap(nullptr, bytesNeeded, PROT_READ|PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | map_page_size, -1, 0);
         end = entries + bytesNeeded/sizeof(HTE);
@@ -74,7 +74,7 @@ public:
         _map = (decltype(_map))MMapper::mmapForMap(_buckets * sizeof(std::atomic<HashTableEntry<K,V>*>));
     }
 public:
-    size_t insert(K const& key, V const& value) {
+    V const& insert(K const& key, V const& value) {
 //        printf("key:   %zx\n", key);
         size_t h = hash(key);
         size_t h16l = hash16LeftFromHash(h);
